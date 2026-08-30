@@ -1,0 +1,24 @@
+{
+  "name": "openbeam",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @openbeam/web dev",
+    "dev:server": "node apps/server/dev-server.mjs",
+    "dev:server:rust": "cd apps/server && cargo run",
+    "import-translations": "node apps/server/scripts/import-translations.mjs",
+    "build": "pnpm --filter @openbeam/web build",
+    "build:server": "cd apps/server && cargo build --release",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:e2e": "pnpm --filter @openbeam/web test:e2e"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "version": "0.1.0",
+  "devDependencies": {
+    "ws": "^8.21.3"
+  }
+}
