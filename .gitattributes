@@ -1,1 +1,0 @@
-apps/server/data/embeddings.bin filter=lfs diff=lfs merge=lfs -text
