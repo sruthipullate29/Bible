@@ -1,7 +1,6 @@
 import { useState } from "react"
 import { LevelMeter } from "@/components/ui/level-meter"
 import { LiveIndicator } from "@/components/ui/live-indicator"
-import { Badge } from "@/components/ui/badge"
 import { MicIcon, PaletteIcon, CastIcon, SunIcon, MoonIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SettingsDialog } from "@/components/settings-dialog"
@@ -9,6 +8,7 @@ import { ThemeDesigner } from "@/components/broadcast/theme-designer"
 import { BroadcastSettings } from "@/components/broadcast/broadcast-settings"
 import { useAudioStore, useTranscriptStore, useBroadcastStore } from "@/stores"
 import { useTheme } from "@/components/theme-provider"
+import { ScheduleButton } from "@/components/panels/schedule-panel"
 
 export function TransportBar() {
   const { theme, setTheme } = useTheme()
@@ -23,12 +23,19 @@ export function TransportBar() {
     >
       {/* Left: Logo + Plan Badge */}
       <div className="flex items-center gap-2.5">
-        <span className="font-heading text-lg font-semibold tracking-tight text-foreground">
-          openbeam
-        </span>
-        <Badge variant="outline" className="text-[0.5625rem] uppercase">
-          Free
-        </Badge>
+        <img
+          src="/sharon-ag-logo.png"
+          alt="Sharon AG"
+          className="size-7 rounded-full object-cover shadow-sm ring-1 ring-amber-500/40"
+        />
+        <div className="flex items-baseline gap-1.5">
+          <span className="font-heading text-base font-bold tracking-tight text-foreground">
+            Sharon AG
+          </span>
+          <span className="text-[10px] font-medium tracking-wider text-amber-500 uppercase">
+            Media
+          </span>
+        </div>
       </div>
 
       {/* Right: Audio + Status + Settings */}
@@ -50,6 +57,7 @@ export function TransportBar() {
             <MoonIcon className="size-3.5" />
           )}
         </Button>
+        <ScheduleButton />
         <Button
           variant="ghost"
           size="icon-sm"

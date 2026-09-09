@@ -11,6 +11,7 @@ export type {
   Verse,
   CrossReference,
   QueueItem,
+  ScheduledCue,
   DetectionResult,
   DetectionStatus,
   SemanticSearchResult,

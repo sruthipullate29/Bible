@@ -5,8 +5,13 @@ import { LiveOutputPanel } from "@/components/panels/live-output-panel"
 import { QueuePanel } from "@/components/panels/queue-panel"
 import { SearchPanel } from "@/components/panels/search-panel"
 import { DetectionsPanel } from "@/components/panels/detections-panel"
+import { ScheduleSheet } from "@/components/panels/schedule-panel"
+import { useScheduleRunner } from "@/hooks/use-schedule"
 
 export function Dashboard() {
+  // Mount the background sermon scheduler ticker
+  useScheduleRunner()
+
   return (
     <div
       style={{
@@ -46,6 +51,10 @@ export function Dashboard() {
         <SearchPanel />
         <DetectionsPanel />
       </div>
+
+      {/* Floating overlays */}
+      <ScheduleSheet />
     </div>
   )
 }
+

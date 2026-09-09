@@ -13,3 +13,4 @@ target/
 flake.lock
 Caddyfile
 apps/web/test-results
+dist-electron/

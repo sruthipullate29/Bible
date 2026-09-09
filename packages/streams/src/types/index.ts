@@ -5,7 +5,7 @@ export type {
   TranscriptEventPayload,
 } from "./transcript"
 export type { Translation, Book, Verse, CrossReference } from "./bible"
-export type { QueueItem } from "./queue"
+export type { QueueItem, ScheduledCue } from "./queue"
 export type {
   DetectionResult,
   DetectionStatus,

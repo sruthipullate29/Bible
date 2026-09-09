@@ -1,31 +1,24 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./openbeam-dark.png" />
-    <source media="(prefers-color-scheme: light)" srcset="./openbeam-light.png" />
-    <img src="./openbeam-light.png" alt="OpenBeam" height="80" />
-  </picture>
+  <img src="./sharon-ag-logo.png" alt="Sharon AG Church" height="130" style="border-radius: 50%;" />
 </p>
+<h1 align="center">Sharon AG — Bible Presentation Software</h1>
 <p align="center">
-  Real-time Bible verse detection for live sermons — in your browser.
+  Real-time AI Bible verse detection & bilingual presentation for church services — in your browser & Windows Desktop.
   <br />
-  <a href="https://openbeam.tensorkit.ai"><strong>Try it live</strong></a> &middot; <a href="https://github.com/openbezal/rhema">Rhema Desktop</a> &middot; <a href="#quick-start">Quick Start</a>
+  <a href="#windows-desktop-application"><strong>Download Windows App (.exe)</strong></a> &middot; 
+  <a href="#verse-scheduler"><strong>Verse Scheduler</strong></a> &middot; 
+  <a href="#quick-start">Quick Start</a>
 </p>
 
 ---
 
-OpenBeam is the cloud companion to [Rhema](https://github.com/openbezal/rhema), a desktop application for real-time Bible verse detection during live sermons. OpenBeam brings the same multi-strategy detection pipeline to the browser — no downloads, no installation, no setup beyond a Deepgram API key.
-
-A preacher says *"nothing can separate us from God's love"* and OpenBeam surfaces **Romans 8:38-39** in real-time, ready for your broadcast overlay.
-
 <p align="center">
-  <img src="./openbeam-banner.png" alt="OpenBeam" width="90%" />
+  <img src="./sharon-ag-banner.jpg" alt="Sharon AG Church Presentation Software" width="95%" style="border-radius: 12px;" />
 </p>
 
-## Why OpenBeam exists
+**Sharon AG Presentation Software** brings real-time AI-powered Bible verse detection, automated verse scheduling, and bilingual scripture display (including NIV & Telugu) directly to your church projection screens and live broadcast stream.
 
-Rhema is a powerful desktop tool, but trying it means downloading a Tauri app, compiling Rust, setting up ONNX models, and configuring NDI. That's a lot to ask before you even know if verse detection is useful for your ministry.
-
-OpenBeam removes that barrier. Open a URL, enter your Deepgram key, and start detecting verses. If it changes how you do live services — and we think it will — [Rhema Desktop](https://github.com/openbezal/rhema) is there when you're ready for the full broadcast production experience.
+A preacher says *"nothing can separate us from God's love"* and Sharon AG surfaces **Romans 8:38-39** in real-time, ready for your live sanctuary display and OBS broadcast overlay.
 
 ## Detection Pipeline
 
@@ -83,15 +76,48 @@ graph TB
 
 ## Quick Start
 
-### Hosted
+### 1. Windows Desktop Application (Recommended for Church / Production PCs)
+
+Run Sharon AG natively as a high-performance Windows desktop software with local SQLite database access and offline UI.
+
+#### Download Shareable Installer
+- The standalone Windows installer is generated at:
+  ```text
+  dist-electron/Sharon AG Setup 0.1.0.exe
+  ```
+- **Shareable Link**: To distribute to other church media PCs or team members, download from GitHub Releases or your team cloud drive:
+  - **GitHub Release**: [`https://github.com/sruthipullate29/Bible/releases`](https://github.com/sruthipullate29/Bible/releases)
+  - **Direct Download Link**: `https://github.com/sruthipullate29/Bible/releases/download/v0.1.0/Sharon.AG.Setup.0.1.0.exe` (after attaching the `.exe` to your GitHub release tag)
+  - Alternatively, upload `dist-electron/Sharon AG Setup 0.1.0.exe` to Google Drive or OneDrive and share the download link with your media team.
+
+#### Run Desktop App in Development
+```bash
+cd electron
+npm install
+npm start
+```
+
+#### Build the Windows Installer (.exe)
+```bash
+# 1. Build web assets
+npm run build --prefix apps/web
+
+# 2. Package into a Windows NSIS installer (.exe)
+npm run dist:win --prefix electron
+```
+The installer will be generated in `dist-electron/Sharon AG Setup 0.1.0.exe`.
+
+---
+
+### 2. Hosted Web Version
 
 Visit [openbeam.tensorkit.ai](https://openbeam.tensorkit.ai), enter your [Deepgram API key](https://console.deepgram.com), and start transcribing.
 
-### Self-Hosted
+### 3. Self-Hosted Web & Server
 
 ```bash
-git clone https://github.com/tensorkithq/openbeam.git
-cd openbeam
+git clone https://github.com/sruthipullate29/Bible.git
+cd Bible
 
 # Enter dev shell (requires Nix)
 nix develop
@@ -144,34 +170,109 @@ Users provide their own Deepgram API key in the browser. It's stored in [`localS
 
 ## Features
 
-- **Real-time transcription** with live partial results as the speaker talks
-- **Multi-strategy verse detection** running four algorithms simultaneously
-- **10+ Bible translations** — KJV, NIV, ESV, NASB, NKJV, NLT, AMP, plus Spanish, French, Portuguese
-- **340,000+ cross-references** from openbible.info
-- **Full-text search** across all translations via SQLite FTS5
-- **Broadcast overlay** for OBS, vMix, xSplit — transparent Canvas 2D rendering
-- **Theme designer** — visual editor for verse overlay appearance (fonts, colors, backgrounds, layout)
-- **Verse queue** with drag-and-drop reordering
-- **Remote control** via OSC (Stream Deck, TouchOSC) and HTTP API
-- **Audio level metering** with gain control
-- **Sermon context tracking** — detects when a preacher is reading through a chapter sequentially
-- **Zero server-side user data** — all preferences in browser localStorage
+- **Windows Desktop Application (.exe)** — native Electron desktop software with offline SQLite Bible database, background Node server, and system tray integration.
+- **Verse Scheduler (Sermon Teleprompter)** — pre-plan scripture cues by sermon time offset with auto-display, countdown timer, manual trigger, and JSON export/import.
+- **Bilingual & Multi-translation Support** — simultaneous dual-language scripture presentations (including NIV, Telugu, KJV, ESV, NASB, NKJV, NLT, AMP, Spanish, French, Portuguese).
+- **Real-time transcription** with live partial results as the speaker talks.
+- **Multi-strategy verse detection** running four algorithms simultaneously (Aho-Corasick, HNSW vector search, Quotation matcher, and Ensemble merger).
+- **340,000+ cross-references** from openbible.info.
+- **Full-text search** across all translations via SQLite FTS5.
+- **Broadcast overlay** for OBS, vMix, xSplit — transparent Canvas 2D rendering.
+- **Theme designer** — visual editor for verse overlay appearance (fonts, colors, backgrounds, layout).
+- **Verse queue** with drag-and-drop reordering.
+- **Remote control** via OSC (Stream Deck, TouchOSC) and HTTP API.
+- **Audio level metering** with gain control.
+- **Sermon context tracking** — detects when a preacher is reading through a chapter sequentially.
+- **Zero server-side user data** — all preferences stored in local client state.
+
+## Verse Scheduler
+
+The **Verse Scheduler** operates like a teleprompter for scripture cues during a church service or sermon. Instead of scrambling to type verses live, the operator or pastor pre-loads scripture cues with elapsed time targets.
+
+```
+[Start Sermon Timer] ──▶ [At 02:30 ➔ Psalm 23:1 Fires Live] ──▶ [Auto-clears after 20s]
+                                ▲
+              (Or click "Present Now" at any moment)
+```
+
+### How It Works
+
+1. **Open the Scheduler**: Click the **Calendar-Clock** button (`Schedule`) in the bottom Transport Bar. A side drawer opens showing the sermon plan.
+2. **Add Cues**:
+   - **Verse Reference**: e.g., `John 3:16`, `Romans 8:28`, or `Psalm 119:105`. Instant book autocompletion helps select chapters and verses rapidly.
+   - **Cue Offset**: Set target time (e.g. `05:00` for 5 minutes into the sermon, or `00:00` for a manual-only cue).
+   - **Label**: Optional reminder (e.g., *"Opening Scripture"*, *"Point 2: Grace"*).
+   - **Display Duration**: Number of seconds the verse remains live before auto-clearing (set `0` to keep live until manually dismissed).
+3. **Run the Sermon**:
+   - Click **Start** to start the sermon stopwatch.
+   - Visual status badges update dynamically:
+     - 🟢 **Active**: Currently displayed live.
+     - 🔵 **Next up**: Countdown showing time remaining (e.g., `-01:42`).
+     - ⚪ **Upcoming**: Queued for later in the sermon.
+     - 🟡 **Manual**: Ready for on-demand presentation.
+     - ✔️ **Past**: Already presented.
+4. **Auto-Display & Auto-Clear**:
+   - When the sermon timer reaches a cue's offset, OpenBeam fetches the verse and automatically pushes it to the Live Output / OBS Broadcast Overlay.
+   - When the display duration expires, the verse smoothly clears from the screen.
+5. **Manual "Present Now"**:
+   - Pastors often jump ahead or recap. Any cue can be triggered immediately by clicking its play icon, regardless of current timer progress.
+6. **Import & Export (JSON)**:
+   - Export sermon schedules to `.json` files to archive or share between team members.
+   - Import previously prepared sermon plans into the desktop app before Sunday service starts.
+
+---
+
+## Windows Desktop Application & Shareable Link
+
+Sharon AG is packaged for Windows as a native desktop application powered by Electron.
+
+### Key Benefits
+- **Bundled Offline Bible Database**: Includes SQLite with full text search (FTS5) for instant lookup without external dependencies.
+- **No Browser Constraints**: Dedicated full-screen window, custom titlebar controls, and background service management.
+- **OBS / vMix Integration**: Local overlay URL (`http://localhost:4000/overlay.html`) can be fed directly into streaming software with zero network latency.
+
+### Accessing & Sharing the Windows Application
+
+1. **Locate the Pre-built Installer**:
+   The installer executable is located in your project directory:
+   ```text
+   dist-electron/Sharon AG Setup 0.1.0.exe
+   ```
+2. **Shareable Link via GitHub Releases**:
+   - Create a GitHub Release in your repository: [`https://github.com/sruthipullate29/Bible/releases`](https://github.com/sruthipullate29/Bible/releases)
+   - Tag the release (e.g., `v0.1.0`) and upload `Sharon AG Setup 0.1.0.exe`.
+   - Once published, provide the direct download link to anyone on Windows:
+     ```text
+     https://github.com/sruthipullate29/Bible/releases/latest/download/Sharon-AG-Setup-0.1.0.exe
+     ```
+3. **Shareable Link via Cloud Storage**:
+   - Upload `dist-electron/Sharon AG Setup 0.1.0.exe` to Google Drive, OneDrive, Dropbox, or WeTransfer.
+   - Copy the shareable link with "Anyone with the link can view/download" permissions.
+
+---
 
 ## Project Structure
 
 ```
 apps
-├── web
-│   └── React dashboard SPA
-├── server
-│   ├── Axum Rust backend
+├── web                  — React 19 dashboard SPA (Vite 7, Tailwind v4, Zustand)
+│   ├── src/components/panels/schedule-panel.tsx  — Verse scheduler drawer UI
+│   ├── src/hooks/use-schedule.ts                — Background cue timer runner
+│   └── src/stores/schedule-store.ts             — Sermon plan state & persistence
+├── server               — Axum Rust backend + Node dev server
+│   ├── data/openbeam.db — SQLite Bible DB with FTS5 index & translations
 │   └── crates
 │       ├── bible        — SQLite Bible DB + FTS5 search
 │       ├── detection    — Aho-Corasick, HNSW, quotation matcher, pipeline
 │       ├── stt          — Deepgram WebSocket client
 │       └── api          — OSC + HTTP remote control
+electron                 — Electron Windows desktop application
+│   ├── main.js          — Background process & local server bootstrap
+│   ├── preload.js       — Secure IPC preload bridge
+│   └── package.json     — Windows NSIS builder configuration
 packages
 ├── streams              — @openbeam/streams RxJS orchestration library
+│   └── src/types/queue.ts — ScheduledCue and queue interfaces
 └── overlay              — Broadcast overlay (standalone)
 ```
 
