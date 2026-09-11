@@ -174,11 +174,11 @@ if (typeof window !== "undefined" && window.electronAPI?.getDeepgramKey) {
   window.electronAPI
     .getDeepgramKey()
     .then((key) => {
-      const activeKey = key || initialKey
+      const activeKey = (key && typeof key === "string" && key.trim()) ? key.trim() : (initialKey || DEFAULT_KEY)
       useSettingsStore.setState({ deepgramApiKey: activeKey, isKeyLoaded: true })
       persistDeepgramKey(activeKey)
       persistSettings(useSettingsStore.getState())
-      if (!key && activeKey) {
+      if ((!key || !key.trim()) && activeKey) {
         window.electronAPI?.setDeepgramKey(activeKey).catch(console.error)
       }
     })

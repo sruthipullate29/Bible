@@ -4,6 +4,10 @@ const fs = require('fs')
 const os = require('os')
 const { startServer, stopServer } = require('./server')
 
+try {
+  app.setPath('userData', path.join(app.getPath('appData'), 'sharon-ag-desktop'))
+} catch {}
+
 let wiredWindow = null
 let wiredDisplayId = null
 
@@ -134,21 +138,29 @@ function getSecureStoragePath() {
   return path.join(userData, 'secure-settings.json')
 }
 
+const DEFAULT_KEY = 'e5e3d90f142670adaed0a57f48a2249148c4dc8f'
+
 function getStoredDeepgramKey() {
   try {
     const filePath = getSecureStoragePath()
     if (!fs.existsSync(filePath)) {
-      return process.env.DEEPGRAM_API_KEY || null
+      return process.env.DEEPGRAM_API_KEY || DEFAULT_KEY
     }
     const raw = fs.readFileSync(filePath, 'utf8')
     const data = JSON.parse(raw)
     if (data.encryptedKey && safeStorage.isEncryptionAvailable()) {
-      return safeStorage.decryptString(Buffer.from(data.encryptedKey, 'base64'))
+      const decrypted = safeStorage.decryptString(Buffer.from(data.encryptedKey, 'base64'))
+      if (decrypted && decrypted.trim()) {
+        return decrypted.trim()
+      }
     }
-    return data.key || null
+    if (data.key && typeof data.key === 'string' && data.key.trim()) {
+      return data.key.trim()
+    }
+    return DEFAULT_KEY
   } catch (err) {
     console.error('[electron] Failed to get Deepgram key from secure storage:', err)
-    return null
+    return DEFAULT_KEY
   }
 }
 
