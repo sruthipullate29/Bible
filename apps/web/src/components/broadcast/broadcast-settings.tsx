@@ -48,6 +48,8 @@ export function BroadcastSettings({
   const altActiveThemeId = useBroadcastStore((s) => s.altActiveThemeId)
   const mainEnabled = useBroadcastStore((s) => s.mainEnabled)
   const altEnabled = useBroadcastStore((s) => s.altEnabled)
+  const wiredAutoConnect = useBroadcastStore((s) => s.wiredAutoConnect)
+  const setWiredAutoConnect = useBroadcastStore((s) => s.setWiredAutoConnect)
 
   const [mainThemeId, setMainThemeId] = useState(activeThemeId)
   const [mainCopied, setMainCopied] = useState(false)
@@ -365,6 +367,17 @@ export function BroadcastSettings({
                   />
                   <label htmlFor="always-on-top-toggle" className="cursor-pointer text-muted-foreground hover:text-foreground">
                     Always On Top
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={wiredAutoConnect}
+                    onCheckedChange={setWiredAutoConnect}
+                    id="auto-connect-toggle"
+                  />
+                  <label htmlFor="auto-connect-toggle" className="cursor-pointer text-muted-foreground hover:text-foreground">
+                    Auto-connect on "Go Live"
                   </label>
                 </div>
               </div>

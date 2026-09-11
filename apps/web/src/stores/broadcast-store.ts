@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import type { BroadcastTheme, VerseRenderData } from "@/types"
 import { BUILTIN_THEMES } from "@/lib/builtin-themes"
-import { getManager } from "@/streams/setup"
+import { getManager, getSessionId } from "@/streams/setup"
 
 const THEMES_KEY = "openbeam:themes"
 const BROADCAST_SETTINGS_KEY = "openbeam:broadcast-settings"
@@ -75,6 +75,16 @@ interface BroadcastState {
   isLive: boolean
   liveVerse: VerseRenderData | null
 
+  // Wired display state
+  isWiredActive: boolean
+  wiredDisplayId: number | null
+  wiredAutoConnect: boolean
+  setWiredAutoConnect: (auto: boolean) => void
+  setWiredActive: (active: boolean, displayId?: number | null) => void
+  openWiredDisplay: (displayId?: number | string) => Promise<void>
+  closeWiredDisplay: () => Promise<void>
+  toggleWiredDisplay: () => Promise<void>
+
   // Designer state
   isDesignerOpen: boolean
   editingThemeId: string | null
@@ -139,6 +149,7 @@ function setNestedValue(obj: Record<string, unknown>, path: string, value: unkno
 
 const initialThemes = loadThemesFromStorage()
 const savedBroadcast = loadBroadcastSettings()
+let browserWiredPopup: Window | null = null
 
 export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   themes: initialThemes,
@@ -304,7 +315,80 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       emitTo("broadcast-alt", { theme: null, verse: null, enabled: false })
     }
   },
-  setLive: (isLive) => set({ isLive }),
+
+  // Wired display
+  isWiredActive: false,
+  wiredDisplayId: null,
+  wiredAutoConnect: true,
+  setWiredAutoConnect: (wiredAutoConnect) => set({ wiredAutoConnect }),
+  setWiredActive: (isWiredActive, wiredDisplayId = null) => set({ isWiredActive, wiredDisplayId }),
+  openWiredDisplay: async (displayId) => {
+    if (typeof window !== "undefined" && window.electronAPI?.openWiredDisplay) {
+      try {
+        const res = await window.electronAPI.openWiredDisplay({
+          displayId,
+          options: {
+            fullscreen: true,
+            alwaysOnTop: true,
+            output: "main",
+            session: getSessionId(),
+          },
+        })
+        if (res.success) {
+          set({ isWiredActive: true, wiredDisplayId: res.displayId ?? null })
+        }
+      } catch (err) {
+        console.error("[broadcast] Failed to open wired display:", err)
+      }
+    } else if (typeof window !== "undefined") {
+      try {
+        const url = `${window.location.origin}/overlay.html?role=overlay&output=main&session=${getSessionId()}`
+        if (browserWiredPopup && !browserWiredPopup.closed) {
+          browserWiredPopup.focus()
+        } else {
+          browserWiredPopup = window.open(
+            url,
+            "SharonAG_Wired_Overlay",
+            "width=1920,height=1080,menubar=no,toolbar=no,location=no,status=no"
+          )
+        }
+        set({ isWiredActive: true, wiredDisplayId: 1 })
+      } catch (err) {
+        console.error("[broadcast] Failed to open wired window popup:", err)
+      }
+    }
+  },
+  closeWiredDisplay: async () => {
+    if (typeof window !== "undefined" && window.electronAPI?.closeWiredDisplay) {
+      try {
+        await window.electronAPI.closeWiredDisplay()
+        set({ isWiredActive: false, wiredDisplayId: null })
+      } catch (err) {
+        console.error("[broadcast] Failed to close wired display:", err)
+      }
+    } else {
+      if (browserWiredPopup && !browserWiredPopup.closed) {
+        browserWiredPopup.close()
+        browserWiredPopup = null
+      }
+      set({ isWiredActive: false, wiredDisplayId: null })
+    }
+  },
+  toggleWiredDisplay: async () => {
+    const s = get()
+    if (s.isWiredActive) {
+      await s.closeWiredDisplay()
+    } else {
+      await s.openWiredDisplay()
+    }
+  },
+
+  setLive: (isLive) => {
+    set({ isLive })
+    if (isLive && get().wiredAutoConnect) {
+      get().openWiredDisplay()
+    }
+  },
   setLiveVerse: (liveVerse) => {
     set({ liveVerse })
     get().syncBroadcastOutput()
@@ -371,3 +455,16 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   },
   setSelectedElement: (selectedElement) => set({ selectedElement }),
 }))
+
+// Synchronize wired display status from Electron
+if (typeof window !== "undefined" && window.electronAPI) {
+  window.electronAPI.getWiredDisplayStatus?.().then((status) => {
+    if (status) {
+      useBroadcastStore.getState().setWiredActive(status.active, status.displayId)
+    }
+  }).catch(() => {})
+
+  window.electronAPI.onWiredDisplayStatusChange?.((status) => {
+    useBroadcastStore.getState().setWiredActive(status.active, status.displayId)
+  })
+}

@@ -4,9 +4,12 @@ import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { cn } from "@/lib/utils"
 import { useBroadcastStore, useBibleStore } from "@/stores"
 import { deriveLiveVerse } from "@/hooks/use-broadcast"
+import { TvIcon } from "lucide-react"
 
 export function LiveOutputPanel() {
   const isLive = useBroadcastStore((s) => s.isLive)
+  const isWiredActive = useBroadcastStore((s) => s.isWiredActive)
+  const toggleWiredDisplay = useBroadcastStore((s) => s.toggleWiredDisplay)
   const themes = useBroadcastStore((s) => s.themes)
   const activeThemeId = useBroadcastStore((s) => s.activeThemeId)
 
@@ -53,25 +56,40 @@ export function LiveOutputPanel() {
       )}
     >
       <PanelHeader title="Live display">
-        <button
-          onClick={() => useBroadcastStore.getState().setLive(!isLive)}
-          className={cn(
-            "flex items-center gap-2 rounded-full px-2.5 py-1 text-[0.625rem] font-medium uppercase tracking-wider transition-all",
-            isLive
-              ? "bg-emerald-500/15 text-emerald-400"
-              : "bg-muted text-muted-foreground"
-          )}
-        >
-          <span
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => toggleWiredDisplay()}
+            title={isWiredActive ? "Wired broadcast active (Click to disconnect)" : "Connect wired broadcast (Projector/HDMI)"}
             className={cn(
-              "size-1.5 rounded-full",
-              isLive
-                ? "animate-pulse bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.5)]"
-                : "bg-muted-foreground/50"
+              "flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[0.5625rem] font-medium uppercase tracking-wider transition-all border",
+              isWiredActive
+                ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+                : "bg-muted/60 border-border/50 text-muted-foreground hover:text-foreground"
             )}
-          />
-          {isLive ? "Live" : "Go live"}
-        </button>
+          >
+            <TvIcon className="size-2.5" />
+            <span>{isWiredActive ? "Wired: Live" : "Wired"}</span>
+          </button>
+          <button
+            onClick={() => useBroadcastStore.getState().setLive(!isLive)}
+            className={cn(
+              "flex items-center gap-2 rounded-full px-2.5 py-1 text-[0.625rem] font-medium uppercase tracking-wider transition-all",
+              isLive
+                ? "bg-emerald-500/15 text-emerald-400"
+                : "bg-muted text-muted-foreground"
+            )}
+          >
+            <span
+              className={cn(
+                "size-1.5 rounded-full",
+                isLive
+                  ? "animate-pulse bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.5)]"
+                  : "bg-muted-foreground/50"
+              )}
+            />
+            {isLive ? "Live" : "Go live"}
+          </button>
+        </div>
       </PanelHeader>
 
       <div

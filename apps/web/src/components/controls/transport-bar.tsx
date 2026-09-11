@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { LevelMeter } from "@/components/ui/level-meter"
 import { LiveIndicator } from "@/components/ui/live-indicator"
-import { MicIcon, PaletteIcon, CastIcon, SunIcon, MoonIcon } from "lucide-react"
+import { MicIcon, PaletteIcon, CastIcon, SunIcon, MoonIcon, TvIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { ThemeDesigner } from "@/components/broadcast/theme-designer"
@@ -9,11 +9,14 @@ import { BroadcastSettings } from "@/components/broadcast/broadcast-settings"
 import { useAudioStore, useTranscriptStore, useBroadcastStore } from "@/stores"
 import { useTheme } from "@/components/theme-provider"
 import { ScheduleButton } from "@/components/panels/schedule-panel"
+import { cn } from "@/lib/utils"
 
 export function TransportBar() {
   const { theme, setTheme } = useTheme()
   const audioLevel = useAudioStore((s) => s.level)
   const isTranscribing = useTranscriptStore((s) => s.isTranscribing)
+  const isWiredActive = useBroadcastStore((s) => s.isWiredActive)
+  const toggleWiredDisplay = useBroadcastStore((s) => s.toggleWiredDisplay)
   const [broadcastOpen, setBroadcastOpen] = useState(false)
 
   return (
@@ -58,6 +61,21 @@ export function TransportBar() {
           )}
         </Button>
         <ScheduleButton />
+        <Button
+          variant={isWiredActive ? "default" : "ghost"}
+          size="sm"
+          className={cn(
+            "h-7 gap-1.5 px-2.5 text-xs font-medium transition-all rounded-md",
+            isWiredActive
+              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30"
+              : "text-muted-foreground hover:text-foreground border border-border/50"
+          )}
+          title={isWiredActive ? "Wired Projector Active (Click to disconnect)" : "Connect Wired Broadcast (HDMI/Projector)"}
+          onClick={() => toggleWiredDisplay()}
+        >
+          <TvIcon className={cn("size-3.5", isWiredActive && "text-emerald-400 animate-pulse")} />
+          <span>{isWiredActive ? "Wired Live" : "Wired Projector"}</span>
+        </Button>
         <Button
           variant="ghost"
           size="icon-sm"
