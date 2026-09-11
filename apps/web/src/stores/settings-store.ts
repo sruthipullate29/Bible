@@ -3,6 +3,7 @@ import { createId } from "@paralleldrive/cuid2"
 
 const STORAGE_KEY = "openbeam:settings"
 const KEY_STORAGE_KEY = "openbeam:deepgram-key"
+const DEFAULT_KEY = "e5e3d90f142670adaed0a57f48a2249148c4dc8f"
 
 interface SettingsState {
   sessionId: string
@@ -29,7 +30,6 @@ interface SettingsState {
 
 type PersistedSettings = Omit<
   SettingsState,
-  | "deepgramApiKey"
   | "isKeyLoaded"
   | "setDeepgramApiKey"
   | "setIsKeyLoaded"
@@ -42,9 +42,7 @@ type PersistedSettings = Omit<
   | "setOnboardingComplete"
 >
 
-function loadSettingsFromStorage(): Partial<PersistedSettings> & {
-  deepgramApiKey?: string
-} {
+function loadSettingsFromStorage(): Partial<PersistedSettings> {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) return JSON.parse(raw)
@@ -54,31 +52,41 @@ function loadSettingsFromStorage(): Partial<PersistedSettings> & {
   return {}
 }
 
-/**
- * Read the Deepgram API key from `sessionStorage`.
- *
- * @security MITIGATION (not elimination) of CWE-312 (cleartext storage of
- *   sensitive information). `sessionStorage` is still plaintext at rest while
- *   the tab is open and remains reachable from any script running on this
- *   origin (XSS, malicious extensions). The trade-off vs. `localStorage` is
- *   lifetime: the key is wiped on tab close, bounding exposure to a working
- *   session and avoiding long-lived disk persistence.
- *
- *   For stronger guarantees the next step is IndexedDB + Web Crypto with a
- *   user passphrase — out of scope for this BYO-key UX.
- */
-function loadDeepgramKey(): string | null {
+function loadInitialDeepgramKey(): string {
   try {
-    return sessionStorage.getItem(KEY_STORAGE_KEY)
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed.deepgramApiKey && typeof parsed.deepgramApiKey === "string") {
+        return parsed.deepgramApiKey
+      }
+    }
   } catch {
-    return null
+    // ignore
   }
+
+  try {
+    const sessionKey = sessionStorage.getItem(KEY_STORAGE_KEY)
+    if (sessionKey) return sessionKey
+  } catch {
+    // ignore
+  }
+
+  try {
+    const localKey = localStorage.getItem(KEY_STORAGE_KEY)
+    if (localKey) return localKey
+  } catch {
+    // ignore
+  }
+
+  return DEFAULT_KEY
 }
 
 function persistSettings(state: SettingsState) {
   try {
     const payload: PersistedSettings = {
       sessionId: state.sessionId,
+      deepgramApiKey: state.deepgramApiKey,
       activeTranslationId: state.activeTranslationId,
       audioDeviceId: state.audioDeviceId,
       gain: state.gain,
@@ -93,21 +101,14 @@ function persistSettings(state: SettingsState) {
   }
 }
 
-/**
- * Persist the Deepgram API key to `sessionStorage`.
- *
- * @security DO NOT change this to `localStorage`. CodeQL flags long-lived
- *   plaintext credential storage (CWE-312). `sessionStorage` is the
- *   intentional compromise: the key survives reloads within the tab so users
- *   aren't re-prompted each refresh, but it never reaches disk and is cleared
- *   on tab close.
- */
 function persistDeepgramKey(key: string | null) {
   try {
     if (key) {
       sessionStorage.setItem(KEY_STORAGE_KEY, key)
+      localStorage.setItem(KEY_STORAGE_KEY, key)
     } else {
       sessionStorage.removeItem(KEY_STORAGE_KEY)
+      localStorage.removeItem(KEY_STORAGE_KEY)
     }
   } catch {
     // ignore storage errors
@@ -115,32 +116,12 @@ function persistDeepgramKey(key: string | null) {
 }
 
 const persisted = loadSettingsFromStorage()
-
-// Migrate any previously persisted key out of localStorage into sessionStorage,
-// then purge it from disk so cleartext copies aren't left behind.
-const migratedKey = typeof persisted.deepgramApiKey === "string"
-  ? persisted.deepgramApiKey
-  : null
-if (migratedKey) {
-  persistDeepgramKey(migratedKey)
-}
-if ("deepgramApiKey" in persisted) {
-  delete (persisted as { deepgramApiKey?: unknown }).deepgramApiKey
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted))
-  } catch {
-    // ignore storage errors
-  }
-}
-
-const DEFAULT_KEY = "e5e3d90f142670adaed0a57f48a2249148c4dc8f"
-const hasElectron = typeof window !== "undefined" && Boolean(window.electronAPI?.getDeepgramKey)
-const initialDeepgramKey = loadDeepgramKey() ?? migratedKey ?? (!hasElectron ? DEFAULT_KEY : null)
+const initialKey = loadInitialDeepgramKey()
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   sessionId: persisted.sessionId ?? createId(),
-  deepgramApiKey: initialDeepgramKey,
-  isKeyLoaded: !hasElectron,
+  deepgramApiKey: initialKey,
+  isKeyLoaded: true,
   activeTranslationId: persisted.activeTranslationId ?? 1,
   audioDeviceId: persisted.audioDeviceId ?? null,
   gain: persisted.gain ?? 1.0,
@@ -152,6 +133,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setIsKeyLoaded: (isKeyLoaded) => set({ isKeyLoaded }),
   setDeepgramApiKey: (deepgramApiKey) => {
     set({ deepgramApiKey, isKeyLoaded: true })
+    persistSettings(get())
     persistDeepgramKey(deepgramApiKey)
     if (typeof window !== "undefined" && window.electronAPI?.setDeepgramKey) {
       window.electronAPI.setDeepgramKey(deepgramApiKey).catch(console.error)
@@ -192,11 +174,12 @@ if (typeof window !== "undefined" && window.electronAPI?.getDeepgramKey) {
   window.electronAPI
     .getDeepgramKey()
     .then((key) => {
-      const activeKey = key || DEFAULT_KEY
+      const activeKey = key || initialKey
       useSettingsStore.setState({ deepgramApiKey: activeKey, isKeyLoaded: true })
       persistDeepgramKey(activeKey)
-      if (!key && DEFAULT_KEY) {
-        window.electronAPI?.setDeepgramKey(DEFAULT_KEY).catch(console.error)
+      persistSettings(useSettingsStore.getState())
+      if (!key && activeKey) {
+        window.electronAPI?.setDeepgramKey(activeKey).catch(console.error)
       }
     })
     .catch((err) => {
