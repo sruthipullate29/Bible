@@ -7,6 +7,7 @@ const KEY_STORAGE_KEY = "openbeam:deepgram-key"
 interface SettingsState {
   sessionId: string
   deepgramApiKey: string | null
+  isKeyLoaded: boolean
   activeTranslationId: number
   audioDeviceId: string | null
   gain: number
@@ -16,6 +17,7 @@ interface SettingsState {
   onboardingComplete: boolean
 
   setDeepgramApiKey: (key: string | null) => void
+  setIsKeyLoaded: (loaded: boolean) => void
   setActiveTranslationId: (id: number) => void
   setAudioDeviceId: (id: string | null) => void
   setGain: (gain: number) => void
@@ -28,7 +30,9 @@ interface SettingsState {
 type PersistedSettings = Omit<
   SettingsState,
   | "deepgramApiKey"
+  | "isKeyLoaded"
   | "setDeepgramApiKey"
+  | "setIsKeyLoaded"
   | "setActiveTranslationId"
   | "setAudioDeviceId"
   | "setGain"
@@ -129,11 +133,14 @@ if ("deepgramApiKey" in persisted) {
   }
 }
 
-const initialDeepgramKey = loadDeepgramKey() ?? migratedKey
+const DEFAULT_KEY = "e5e3d90f142670adaed0a57f48a2249148c4dc8f"
+const hasElectron = typeof window !== "undefined" && Boolean(window.electronAPI?.getDeepgramKey)
+const initialDeepgramKey = loadDeepgramKey() ?? migratedKey ?? (!hasElectron ? DEFAULT_KEY : null)
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   sessionId: persisted.sessionId ?? createId(),
   deepgramApiKey: initialDeepgramKey,
+  isKeyLoaded: !hasElectron,
   activeTranslationId: persisted.activeTranslationId ?? 1,
   audioDeviceId: persisted.audioDeviceId ?? null,
   gain: persisted.gain ?? 1.0,
@@ -142,9 +149,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   cooldownMs: persisted.cooldownMs ?? 2500,
   onboardingComplete: persisted.onboardingComplete ?? false,
 
+  setIsKeyLoaded: (isKeyLoaded) => set({ isKeyLoaded }),
   setDeepgramApiKey: (deepgramApiKey) => {
-    set({ deepgramApiKey })
+    set({ deepgramApiKey, isKeyLoaded: true })
     persistDeepgramKey(deepgramApiKey)
+    if (typeof window !== "undefined" && window.electronAPI?.setDeepgramKey) {
+      window.electronAPI.setDeepgramKey(deepgramApiKey).catch(console.error)
+    }
   },
   setActiveTranslationId: (activeTranslationId) => {
     set({ activeTranslationId })
@@ -175,3 +186,21 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     persistSettings(get())
   },
 }))
+
+// Load key asynchronously from Electron secure storage on startup
+if (typeof window !== "undefined" && window.electronAPI?.getDeepgramKey) {
+  window.electronAPI
+    .getDeepgramKey()
+    .then((key) => {
+      const activeKey = key || DEFAULT_KEY
+      useSettingsStore.setState({ deepgramApiKey: activeKey, isKeyLoaded: true })
+      persistDeepgramKey(activeKey)
+      if (!key && DEFAULT_KEY) {
+        window.electronAPI?.setDeepgramKey(DEFAULT_KEY).catch(console.error)
+      }
+    })
+    .catch((err) => {
+      console.error("[settings] Failed to load key from Electron secure storage:", err)
+      useSettingsStore.setState({ isKeyLoaded: true })
+    })
+}

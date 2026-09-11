@@ -13,11 +13,12 @@ import { useSettingsStore } from "@/stores/settings-store"
 
 export function ApiKeyPrompt() {
   const deepgramApiKey = useSettingsStore((s) => s.deepgramApiKey)
+  const isKeyLoaded = useSettingsStore((s) => s.isKeyLoaded)
   const setDeepgramApiKey = useSettingsStore((s) => s.setDeepgramApiKey)
   const [keyValue, setKeyValue] = useState("")
   const [error, setError] = useState("")
 
-  const isOpen = !deepgramApiKey
+  const isOpen = isKeyLoaded && !deepgramApiKey
 
   const handleSave = () => {
     const trimmed = keyValue.trim()

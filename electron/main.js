@@ -1,7 +1,187 @@
-const { app, BrowserWindow, Menu, shell, ipcMain, Tray, nativeImage } = require('electron')
+const { app, BrowserWindow, Menu, shell, ipcMain, Tray, nativeImage, safeStorage, screen } = require('electron')
 const path = require('path')
 const fs = require('fs')
+const os = require('os')
 const { startServer, stopServer } = require('./server')
+
+let wiredWindow = null
+let wiredDisplayId = null
+
+function getDisplayList() {
+  try {
+    const displays = screen.getAllDisplays()
+    const primaryId = screen.getPrimaryDisplay().id
+    return displays.map((d, index) => ({
+      id: d.id,
+      index: index + 1,
+      label: `Display ${index + 1}: ${d.bounds.width}x${d.bounds.height}${d.id === primaryId ? ' (Primary / Control)' : ' (External / Projector)'}`,
+      isPrimary: d.id === primaryId,
+      bounds: d.bounds,
+      width: d.bounds.width,
+      height: d.bounds.height,
+    }))
+  } catch (err) {
+    console.error('[electron] Failed to get display list:', err)
+    return []
+  }
+}
+
+function openWiredDisplay(displayId, options = {}) {
+  try {
+    const displays = screen.getAllDisplays()
+    let target = null
+    if (displayId) {
+      target = displays.find((d) => String(d.id) === String(displayId))
+    }
+    if (!target) {
+      // Prefer non-primary display (external monitor/projector)
+      target = displays.find((d) => d.id !== screen.getPrimaryDisplay().id) || screen.getPrimaryDisplay()
+    }
+
+    if (wiredWindow && !wiredWindow.isDestroyed()) {
+      wiredWindow.close()
+      wiredWindow = null
+    }
+
+    const { bounds } = target
+    const isFullscreen = options.fullscreen !== false
+    const output = options.output || 'main'
+    const session = options.session || 'default'
+
+    wiredWindow = new BrowserWindow({
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+      fullscreen: isFullscreen,
+      frame: !isFullscreen,
+      alwaysOnTop: options.alwaysOnTop ?? true,
+      backgroundColor: '#000000',
+      title: 'Sharon AG – Wired Presentation Output',
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+      },
+    })
+
+    wiredDisplayId = target.id
+
+    const targetUrl = `${API_URL}/overlay.html?role=overlay&output=${output}&session=${session}`
+    wiredWindow.loadURL(targetUrl)
+
+    wiredWindow.on('closed', () => {
+      wiredWindow = null
+      wiredDisplayId = null
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('wired-display:status-change', { active: false, displayId: null })
+      }
+    })
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('wired-display:status-change', { active: true, displayId: target.id })
+    }
+
+    return { success: true, displayId: target.id }
+  } catch (err) {
+    console.error('[electron] Failed to open wired display:', err)
+    return { success: false, error: err.message }
+  }
+}
+
+function closeWiredDisplay() {
+  if (wiredWindow && !wiredWindow.isDestroyed()) {
+    wiredWindow.close()
+    wiredWindow = null
+    wiredDisplayId = null
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('wired-display:status-change', { active: false, displayId: null })
+    }
+    return { success: true }
+  }
+  return { success: false }
+}
+
+function getLocalNetworkIps() {
+  const nets = os.networkInterfaces()
+  const results = []
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name] || []) {
+      if (net.family === 'IPv4' && !net.internal) {
+        results.push({ name, address: net.address })
+      }
+    }
+  }
+  return results
+}
+
+ipcMain.handle('displays:get', () => getDisplayList())
+ipcMain.handle('wired-display:open', (_event, { displayId, options } = {}) => openWiredDisplay(displayId, options))
+ipcMain.handle('wired-display:close', () => closeWiredDisplay())
+ipcMain.handle('wired-display:status', () => ({
+  active: Boolean(wiredWindow && !wiredWindow.isDestroyed()),
+  displayId: wiredDisplayId,
+}))
+ipcMain.handle('network:get-ips', () => ({
+  port: API_PORT,
+  ips: getLocalNetworkIps(),
+}))
+
+function getSecureStoragePath() {
+  const userData = app.getPath('userData')
+  if (!fs.existsSync(userData)) {
+    fs.mkdirSync(userData, { recursive: true })
+  }
+  return path.join(userData, 'secure-settings.json')
+}
+
+function getStoredDeepgramKey() {
+  try {
+    const filePath = getSecureStoragePath()
+    if (!fs.existsSync(filePath)) {
+      return process.env.DEEPGRAM_API_KEY || null
+    }
+    const raw = fs.readFileSync(filePath, 'utf8')
+    const data = JSON.parse(raw)
+    if (data.encryptedKey && safeStorage.isEncryptionAvailable()) {
+      return safeStorage.decryptString(Buffer.from(data.encryptedKey, 'base64'))
+    }
+    return data.key || null
+  } catch (err) {
+    console.error('[electron] Failed to get Deepgram key from secure storage:', err)
+    return null
+  }
+}
+
+function setStoredDeepgramKey(key) {
+  try {
+    const filePath = getSecureStoragePath()
+    if (!key) {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath)
+      }
+      return true
+    }
+    let payload = {}
+    if (safeStorage.isEncryptionAvailable()) {
+      payload.encryptedKey = safeStorage.encryptString(key).toString('base64')
+    } else {
+      payload.key = key
+    }
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8')
+    return true
+  } catch (err) {
+    console.error('[electron] Failed to save Deepgram key to secure storage:', err)
+    return false
+  }
+}
+
+ipcMain.handle('deepgram:get-key', () => {
+  return getStoredDeepgramKey()
+})
+
+ipcMain.handle('deepgram:set-key', (_event, key) => {
+  return setStoredDeepgramKey(key)
+})
 
 let mainWindow = null
 let tray = null

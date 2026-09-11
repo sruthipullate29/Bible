@@ -1,6 +1,7 @@
 const http = require('node:http')
 const fs = require('node:fs')
 const path = require('node:path')
+const os = require('node:os')
 const { DatabaseSync } = require('node:sqlite')
 const { WebSocketServer, WebSocket } = require('ws')
 
@@ -51,9 +52,9 @@ function resolveDbPath() {
 
 function resolveDistDir() {
   const candidates = [
-    path.join(__dirname, 'dist'),
     process.resourcesPath ? path.join(process.resourcesPath, 'app.asar', 'dist') : null,
     path.join(__dirname, '..', 'apps', 'web', 'dist'),
+    path.join(__dirname, 'dist'),
   ].filter(Boolean)
 
   for (const p of candidates) {
@@ -251,6 +252,19 @@ function startServer(port = 4001) {
             return sendJson(200, remoteState)
           }
 
+          if (pathname === '/api/network/info') {
+            const nets = os.networkInterfaces()
+            const ips = []
+            for (const name of Object.keys(nets)) {
+              for (const net of nets[name] || []) {
+                if (net.family === 'IPv4' && !net.internal) {
+                  ips.push({ name, address: net.address })
+                }
+              }
+            }
+            return sendJson(200, { port, ips })
+          }
+
           if (pathname === '/api/v1/control') {
             return sendJson(200, { success: true })
           }
@@ -342,8 +356,8 @@ function startServer(port = 4001) {
       }
     })
 
-    server.listen(port, '127.0.0.1', () => {
-      console.log(`[server] Sharon AG Server listening on http://127.0.0.1:${port}`)
+    server.listen(port, '0.0.0.0', () => {
+      console.log(`[server] Sharon AG Server listening on http://0.0.0.0:${port}`)
       serverInstance = server
       resolve(server)
     })
