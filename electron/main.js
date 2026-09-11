@@ -1,74 +1,13 @@
 const { app, BrowserWindow, Menu, shell, ipcMain, Tray, nativeImage } = require('electron')
 const path = require('path')
-const { spawn } = require('child_process')
-const http = require('http')
 const fs = require('fs')
+const { startServer, stopServer } = require('./server')
 
 let mainWindow = null
 let tray = null
-let apiServer = null
 
-const isDev = process.env.NODE_ENV === 'development'
 const API_PORT = 4001
-const API_URL = `http://localhost:${API_PORT}`
-
-// ─── Start embedded Node API server ────────────────────────────────────────────
-function startApiServer() {
-  // In packaged app: resources are in process.resourcesPath
-  const appRoot = app.isPackaged
-    ? path.join(process.resourcesPath, '..', 'app')
-    : path.join(__dirname, '..')
-
-  const serverScript = path.join(appRoot, 'apps', 'server', 'dev-server.mjs')
-
-  // DB lives in extraResources/server/data or the source tree
-  const dbPath = app.isPackaged
-    ? path.join(process.resourcesPath, 'server', 'data', 'openbeam.db')
-    : path.join(appRoot, 'apps', 'server', 'data', 'openbeam.db')
-
-  if (!fs.existsSync(serverScript)) {
-    console.warn('[electron] API server script not found at', serverScript)
-    return
-  }
-
-  console.log('[electron] Starting API server:', serverScript)
-  console.log('[electron] DB path:', dbPath)
-
-  apiServer = spawn(process.execPath, [serverScript], {
-    cwd: appRoot,
-    env: { ...process.env, NODE_ENV: 'production', DB_PATH: dbPath },
-    stdio: 'pipe',
-  })
-  apiServer.stdout.on('data', (d) => console.log('[api]', d.toString().trim()))
-  apiServer.stderr.on('data', (d) => console.error('[api]', d.toString().trim()))
-  apiServer.on('exit', (code) => console.log('[api] exited with code', code))
-}
-
-function stopApiServer() {
-  if (apiServer) {
-    apiServer.kill()
-    apiServer = null
-  }
-}
-
-// ─── Wait for API to be ready ───────────────────────────────────────────────────
-function waitForApi(url, retries = 20, delayMs = 500) {
-  return new Promise((resolve, reject) => {
-    let attempts = 0
-    const tryConnect = () => {
-      http.get(`${url}/api/health`, (res) => {
-        if (res.statusCode === 200) return resolve()
-        retry()
-      }).on('error', retry)
-    }
-    const retry = () => {
-      attempts++
-      if (attempts >= retries) return reject(new Error('API server did not start in time'))
-      setTimeout(tryConnect, delayMs)
-    }
-    tryConnect()
-  })
-}
+const API_URL = `http://127.0.0.1:${API_PORT}`
 
 // ─── Create main window ─────────────────────────────────────────────────────────
 function createWindow() {
@@ -89,18 +28,26 @@ function createWindow() {
     show: false,
   })
 
-  const appRoot = app.isPackaged
-    ? path.join(process.resourcesPath, '..', 'app')
-    : path.join(__dirname, '..')
+  // Load from local embedded server (handles both API and static UI with zero latency)
+  const localIndex = path.join(__dirname, 'dist', 'index.html')
 
-  const distDir = path.join(appRoot, 'apps', 'web', 'dist')
-  const indexFile = path.join(distDir, 'index.html')
+  const tryLoad = async () => {
+    try {
+      await mainWindow.loadURL(API_URL)
+      console.log('[electron] Loaded embedded server:', API_URL)
+    } catch (err) {
+      console.warn('[electron] Embedded server load failed:', err.message)
 
-  if (fs.existsSync(indexFile)) {
-    mainWindow.loadFile(indexFile)
-  } else {
-    mainWindow.loadURL('http://localhost:3000')
+      if (fs.existsSync(localIndex)) {
+        console.log('[electron] Loading local file:', localIndex)
+        await mainWindow.loadFile(localIndex)
+      } else {
+        console.error('[electron] Local index.html not found:', localIndex)
+      }
+    }
   }
+
+  tryLoad()
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show()
@@ -113,7 +60,7 @@ function createWindow() {
 
   // Open external links in default browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('http')) {
+    if (url.startsWith('http') && !url.includes('localhost')) {
       shell.openExternal(url)
       return { action: 'deny' }
     }
@@ -158,14 +105,11 @@ function createWindow() {
 
 // ─── App lifecycle ──────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
-  startApiServer()
-
-  // Give the API server a moment to start (up to 10s)
   try {
-    await waitForApi(API_URL, 20, 500)
-    console.log('[electron] API server is ready')
-  } catch (e) {
-    console.warn('[electron] API server not ready, opening UI anyway:', e.message)
+    await startServer(API_PORT)
+    console.log('[electron] Embedded server started on port', API_PORT)
+  } catch (err) {
+    console.error('[electron] Error starting embedded server:', err)
   }
 
   createWindow()
@@ -177,11 +121,11 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    stopApiServer()
+    stopServer()
     app.quit()
   }
 })
 
 app.on('before-quit', () => {
-  stopApiServer()
+  stopServer()
 })

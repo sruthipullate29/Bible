@@ -138,7 +138,14 @@ function SpeechSection() {
   const { deepgramApiKey, setDeepgramApiKey } = useSettingsStore()
   const [keyValue, setKeyValue] = useState(deepgramApiKey ?? "")
   const [saved, setSaved] = useState(false)
-
+  useEffect(() => {
+    window.electronAPI?.getDeepgramKey().then((key) => {
+      if (key) {
+        setKeyValue(key)
+        setDeepgramApiKey(key)
+      }
+    })
+  }, [setDeepgramApiKey])
   const handleSaveKey = () => {
     setDeepgramApiKey(keyValue || null)
     setSaved(true)

@@ -22,15 +22,13 @@
     "files": [
       "main.js",
       "preload.js",
-      "../apps/web/dist/**",
-      "../apps/server/dev-server.mjs",
-      "../apps/server/data/**",
-      "../apps/server/scripts/**"
+      "server.js",
+      "dist/**"
     ],
     "extraResources": [
       {
-        "from": "../apps/server/data",
-        "to": "server/data"
+        "from": "data",
+        "to": "data"
       }
     ],
     "win": {
@@ -62,5 +60,8 @@
   "devDependencies": {
     "electron": "^44.0.0",
     "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "ws": "^8.21.3"
   }
 }
