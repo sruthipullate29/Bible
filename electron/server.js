@@ -32,22 +32,64 @@ const remoteState = {
   confidence_threshold: 0.75,
 }
 
-function resolveDbPath() {
-  const candidates = [
+function resolveDbPath(options = {}) {
+  const userDataDir = options.userData || (process.env.APPDATA ? path.join(process.env.APPDATA, 'sharon-ag-desktop') : null)
+
+  const sourceCandidates = [
     process.resourcesPath ? path.join(process.resourcesPath, 'data', 'openbeam.db') : null,
     process.resourcesPath ? path.join(process.resourcesPath, 'server', 'data', 'openbeam.db') : null,
     path.join(__dirname, 'data', 'openbeam.db'),
     path.join(__dirname, '..', 'apps', 'server', 'data', 'openbeam.db'),
   ].filter(Boolean)
 
-  for (const p of candidates) {
+  let sourceDb = null
+  for (const p of sourceCandidates) {
     if (fs.existsSync(p)) {
-      console.log('[server] Found database at:', p)
-      return p
+      sourceDb = p
+      console.log('[server] Found bundled database at:', p)
+      break
     }
   }
-  console.warn('[server] Database not found in candidate paths, using default:', candidates[0])
-  return candidates[0]
+
+  // If we have a userData directory, always prepare a copy in userData to guarantee write permissions
+  // (Windows forbids SQLite from creating journal/lock files in C:\Program Files\)
+  if (userDataDir) {
+    const userDbDir = path.join(userDataDir, 'data')
+    const userDbPath = path.join(userDbDir, 'openbeam.db')
+    try {
+      if (!fs.existsSync(userDbDir)) {
+        fs.mkdirSync(userDbDir, { recursive: true })
+      }
+
+      if (sourceDb) {
+        let shouldCopy = false
+        if (!fs.existsSync(userDbPath)) {
+          shouldCopy = true
+        } else {
+          const sourceStat = fs.statSync(sourceDb)
+          const userStat = fs.statSync(userDbPath)
+          // If bundled database is different size and source is valid, copy update
+          if (sourceStat.size !== userStat.size && sourceStat.size > 0) {
+            shouldCopy = true
+          }
+        }
+
+        if (shouldCopy) {
+          console.log('[server] Copying database to writable user directory:', userDbPath)
+          fs.copyFileSync(sourceDb, userDbPath)
+        }
+      }
+
+      if (fs.existsSync(userDbPath)) {
+        console.log('[server] Using writable user database at:', userDbPath)
+        return userDbPath
+      }
+    } catch (err) {
+      console.error('[server] Error preparing user database in userData:', err)
+    }
+  }
+
+  return sourceDb || sourceCandidates[0]
 }
 
 function resolveDistDir() {
@@ -66,15 +108,21 @@ function resolveDistDir() {
   return path.join(__dirname, 'dist')
 }
 
-function startServer(port = 4001) {
+function startServer(port = 4001, options = {}) {
   if (serverInstance) return Promise.resolve(serverInstance)
 
-  const dbPath = resolveDbPath()
+  const dbPath = resolveDbPath(options)
   try {
     db = new DatabaseSync(dbPath)
-    console.log('[server] SQLite database connected successfully')
+    console.log('[server] SQLite database connected successfully at:', dbPath)
   } catch (err) {
-    console.error('[server] Failed to open SQLite database:', err)
+    console.error('[server] Failed to open SQLite database in read-write mode:', err)
+    try {
+      db = new DatabaseSync(dbPath, { readOnly: true })
+      console.log('[server] Opened SQLite database in readOnly mode at:', dbPath)
+    } catch (err2) {
+      console.error('[server] Failed to open SQLite database in readOnly mode:', err2)
+    }
   }
 
   const distDir = resolveDistDir()

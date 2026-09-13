@@ -405,7 +405,8 @@ function createWindow() {
 // ─── App lifecycle ──────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
   try {
-    await startServer(API_PORT)
+    const userData = app.getPath('userData')
+    await startServer(API_PORT, { userData })
     console.log('[electron] Embedded server started on port', API_PORT)
   } catch (err) {
     console.error('[electron] Error starting embedded server:', err)
