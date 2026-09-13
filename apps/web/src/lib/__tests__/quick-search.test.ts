@@ -9,11 +9,14 @@ import {
 const books: Book[] = [
   { id: 1, translation_id: 1, book_number: 22, name: "Song of Solomon", abbreviation: "SOS", testament: "OT" },
   { id: 2, translation_id: 1, book_number: 43, name: "John", abbreviation: "Jn", testament: "NT" },
-  { id: 3, translation_id: 1, book_number: 62, name: "I John", abbreviation: "1Jn", testament: "NT" },
-  { id: 4, translation_id: 1, book_number: 63, name: "II John", abbreviation: "2Jn", testament: "NT" },
+  { id: 3, translation_id: 1, book_number: 62, name: "1 John", abbreviation: "1Jn", testament: "NT" },
+  { id: 4, translation_id: 1, book_number: 63, name: "2 John", abbreviation: "2Jn", testament: "NT" },
   { id: 5, translation_id: 1, book_number: 45, name: "Romans", abbreviation: "Rom", testament: "NT" },
   { id: 6, translation_id: 1, book_number: 19, name: "Psalms", abbreviation: "Ps", testament: "OT" },
   { id: 7, translation_id: 1, book_number: 1, name: "Genesis", abbreviation: "Gen", testament: "OT" },
+  { id: 8, translation_id: 1, book_number: 60, name: "1 Peter", abbreviation: "1 Pet", testament: "NT" },
+  { id: 9, translation_id: 1, book_number: 61, name: "2 Peter", abbreviation: "2 Pet", testament: "NT" },
+  { id: 10, translation_id: 1, book_number: 46, name: "1 Corinthians", abbreviation: "1 Cor", testament: "NT" },
 ]
 
 describe("normalizeInput", () => {
@@ -58,10 +61,35 @@ describe("getAutocompleteSuggestion", () => {
     expect(result.stage).toBe("complete")
   })
 
-  it("handles numbered books via Roman numeral conversion", () => {
-    const result = getAutocompleteSuggestion("1 Jo", books)
-    expect(result.matchedBook?.name).toBe("I John")
-    expect(result.stage).toBe("book")
+  it("handles numbered books like 1 John and 1 Peter", () => {
+    const r1 = getAutocompleteSuggestion("1 Jo", books)
+    expect(r1.matchedBook?.name).toBe("1 John")
+    expect(r1.stage).toBe("book")
+
+    const r2 = getAutocompleteSuggestion("1 John 3:16", books)
+    expect(r2.matchedBook?.name).toBe("1 John")
+    expect(r2.chapter).toBe(3)
+    expect(r2.verse).toBe(16)
+    expect(r2.stage).toBe("complete")
+
+    const r3 = getAutocompleteSuggestion("1 Peter 1:3", books)
+    expect(r3.matchedBook?.name).toBe("1 Peter")
+    expect(r3.chapter).toBe(1)
+    expect(r3.verse).toBe(3)
+    expect(r3.stage).toBe("complete")
+
+    const r4 = getAutocompleteSuggestion("1 p", books)
+    expect(r4.matchedBook?.name).toBe("1 Peter")
+
+    const r5 = getAutocompleteSuggestion("1pet", books)
+    expect(r5.matchedBook?.name).toBe("1 Peter")
+
+    const r6 = getAutocompleteSuggestion("2 Peter", books)
+    expect(r6.matchedBook?.name).toBe("2 Peter")
+
+    const r7 = getAutocompleteSuggestion("1 Cor 13", books)
+    expect(r7.matchedBook?.name).toBe("1 Corinthians")
+    expect(r7.chapter).toBe(13)
   })
 
   it("handles Song of Solomon", () => {

@@ -8,101 +8,211 @@ try {
   app.setPath('userData', path.join(app.getPath('appData'), 'sharon-ag-desktop'))
 } catch {}
 
-let wiredWindow = null
-let wiredDisplayId = null
+const wiredWindows = {
+  main: { window: null, displayId: null },
+  alt: { window: null, displayId: null },
+}
 
 function getDisplayList() {
   try {
     const displays = screen.getAllDisplays()
-    const primaryId = screen.getPrimaryDisplay().id
-    return displays.map((d, index) => ({
-      id: d.id,
-      index: index + 1,
-      label: `Display ${index + 1}: ${d.bounds.width}x${d.bounds.height}${d.id === primaryId ? ' (Primary / Control)' : ' (External / Projector)'}`,
-      isPrimary: d.id === primaryId,
-      bounds: d.bounds,
-      width: d.bounds.width,
-      height: d.bounds.height,
-    }))
+    const primary = screen.getPrimaryDisplay()
+    const primaryId = primary.id
+    const nonPrimary = displays.filter((d) => d.id !== primaryId)
+
+    return displays.map((d, index) => {
+      const isPrimary = d.id === primaryId
+      let connectorLabel = ''
+      if (isPrimary) {
+        connectorLabel = 'Primary / Control Monitor'
+      } else {
+        const extIndex = nonPrimary.findIndex((np) => np.id === d.id)
+        if (extIndex === 0) {
+          connectorLabel = 'HDMI 1 / Main Screen'
+        } else if (extIndex === 1) {
+          connectorLabel = 'HDMI 2 / Alternative Screen'
+        } else {
+          connectorLabel = `HDMI ${extIndex + 1} / External Screen`
+        }
+      }
+
+      return {
+        id: d.id,
+        index: index + 1,
+        label: `Display ${index + 1}: ${d.bounds.width}x${d.bounds.height} (${connectorLabel})`,
+        connectorLabel,
+        isPrimary,
+        bounds: d.bounds,
+        width: d.bounds.width,
+        height: d.bounds.height,
+      }
+    })
   } catch (err) {
     console.error('[electron] Failed to get display list:', err)
     return []
   }
 }
 
+function getWiredStatus(output) {
+  const mainActive = Boolean(wiredWindows.main?.window && !wiredWindows.main.window.isDestroyed())
+  const altActive = Boolean(wiredWindows.alt?.window && !wiredWindows.alt.window.isDestroyed())
+
+  const fullStatus = {
+    main: {
+      active: mainActive,
+      displayId: mainActive ? wiredWindows.main.displayId : null,
+    },
+    alt: {
+      active: altActive,
+      displayId: altActive ? wiredWindows.alt.displayId : null,
+    },
+    active: mainActive || altActive,
+    displayId: mainActive ? wiredWindows.main.displayId : (altActive ? wiredWindows.alt.displayId : null),
+  }
+
+  if (output && fullStatus[output]) {
+    return {
+      ...fullStatus[output],
+      status: fullStatus,
+    }
+  }
+  return fullStatus
+}
+
 function openWiredDisplay(displayId, options = {}) {
   try {
     const displays = screen.getAllDisplays()
+    const primary = screen.getPrimaryDisplay()
+    const primaryId = primary.id
+    const nonPrimary = displays.filter((d) => d.id !== primaryId)
+    const output = (options.output === 'alt') ? 'alt' : 'main'
+
     let target = null
     if (displayId) {
       target = displays.find((d) => String(d.id) === String(displayId))
     }
     if (!target) {
-      // Prefer non-primary display (external monitor/projector)
-      target = displays.find((d) => d.id !== screen.getPrimaryDisplay().id) || screen.getPrimaryDisplay()
+      // Intelligently assign default display for 2 HDMI outputs:
+      // If output is main: default to 1st external display (HDMI 1), else primary
+      // If output is alt: default to 2nd external display (HDMI 2), else 1st external, else primary
+      if (output === 'alt') {
+        target = nonPrimary[1] || nonPrimary[0] || primary
+      } else {
+        target = nonPrimary[0] || primary
+      }
     }
 
-    if (wiredWindow && !wiredWindow.isDestroyed()) {
-      wiredWindow.close()
-      wiredWindow = null
+    const isFullscreen = options.fullscreen !== false
+    const session = options.session || 'default'
+
+    // Close existing window for this specific output channel if already running
+    if (wiredWindows[output]?.window && !wiredWindows[output].window.isDestroyed()) {
+      wiredWindows[output].window.close()
+      wiredWindows[output] = { window: null, displayId: null }
     }
 
     const { bounds } = target
-    const isFullscreen = options.fullscreen !== false
-    const output = options.output || 'main'
-    const session = options.session || 'default'
+    const title = output === 'alt'
+      ? 'Sharon AG – HDMI 2 Alternative / Stage Output'
+      : 'Sharon AG – HDMI 1 Main Presentation Output'
 
-    wiredWindow = new BrowserWindow({
+    const win = new BrowserWindow({
       x: bounds.x,
       y: bounds.y,
       width: bounds.width,
       height: bounds.height,
-      fullscreen: isFullscreen,
+      fullscreen: false,
       frame: !isFullscreen,
       alwaysOnTop: options.alwaysOnTop ?? true,
       backgroundColor: '#000000',
-      title: 'Sharon AG – Wired Presentation Output',
+      title,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
       },
     })
 
-    wiredDisplayId = target.id
+    win.setBounds(bounds)
+    if (isFullscreen) {
+      win.setFullScreen(true)
+    }
+
+    wiredWindows[output] = {
+      window: win,
+      displayId: target.id,
+    }
 
     const targetUrl = `${API_URL}/overlay.html?role=overlay&output=${output}&session=${session}`
-    wiredWindow.loadURL(targetUrl)
+    win.loadURL(targetUrl)
 
-    wiredWindow.on('closed', () => {
-      wiredWindow = null
-      wiredDisplayId = null
+    win.on('closed', () => {
+      wiredWindows[output] = { window: null, displayId: null }
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('wired-display:status-change', { active: false, displayId: null })
+        mainWindow.webContents.send('wired-display:status-change', {
+          output,
+          active: false,
+          displayId: null,
+          main: getWiredStatus('main'),
+          alt: getWiredStatus('alt'),
+          status: getWiredStatus(),
+        })
       }
     })
 
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('wired-display:status-change', { active: true, displayId: target.id })
+      mainWindow.webContents.send('wired-display:status-change', {
+        output,
+        active: true,
+        displayId: target.id,
+        main: getWiredStatus('main'),
+        alt: getWiredStatus('alt'),
+        status: getWiredStatus(),
+      })
     }
 
-    return { success: true, displayId: target.id }
+    return { success: true, displayId: target.id, output }
   } catch (err) {
     console.error('[electron] Failed to open wired display:', err)
     return { success: false, error: err.message }
   }
 }
 
-function closeWiredDisplay() {
-  if (wiredWindow && !wiredWindow.isDestroyed()) {
-    wiredWindow.close()
-    wiredWindow = null
-    wiredDisplayId = null
+function closeWiredDisplay(output) {
+  if (output && wiredWindows[output]) {
+    if (wiredWindows[output].window && !wiredWindows[output].window.isDestroyed()) {
+      wiredWindows[output].window.close()
+    }
+    wiredWindows[output] = { window: null, displayId: null }
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('wired-display:status-change', { active: false, displayId: null })
+      mainWindow.webContents.send('wired-display:status-change', {
+        output,
+        active: false,
+        displayId: null,
+        main: getWiredStatus('main'),
+        alt: getWiredStatus('alt'),
+        status: getWiredStatus(),
+      })
     }
     return { success: true }
   }
-  return { success: false }
+
+  for (const key of ['main', 'alt']) {
+    if (wiredWindows[key]?.window && !wiredWindows[key].window.isDestroyed()) {
+      wiredWindows[key].window.close()
+    }
+    wiredWindows[key] = { window: null, displayId: null }
+  }
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('wired-display:status-change', {
+      active: false,
+      displayId: null,
+      main: { active: false, displayId: null },
+      alt: { active: false, displayId: null },
+      status: getWiredStatus(),
+    })
+  }
+  return { success: true }
 }
 
 function getLocalNetworkIps() {
@@ -120,11 +230,8 @@ function getLocalNetworkIps() {
 
 ipcMain.handle('displays:get', () => getDisplayList())
 ipcMain.handle('wired-display:open', (_event, { displayId, options } = {}) => openWiredDisplay(displayId, options))
-ipcMain.handle('wired-display:close', () => closeWiredDisplay())
-ipcMain.handle('wired-display:status', () => ({
-  active: Boolean(wiredWindow && !wiredWindow.isDestroyed()),
-  displayId: wiredDisplayId,
-}))
+ipcMain.handle('wired-display:close', (_event, { output } = {}) => closeWiredDisplay(output))
+ipcMain.handle('wired-display:status', (_event, { output } = {}) => getWiredStatus(output))
 ipcMain.handle('network:get-ips', () => ({
   port: API_PORT,
   ips: getLocalNetworkIps(),

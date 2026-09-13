@@ -9,6 +9,8 @@ import { TvIcon } from "lucide-react"
 export function LiveOutputPanel() {
   const isLive = useBroadcastStore((s) => s.isLive)
   const isWiredActive = useBroadcastStore((s) => s.isWiredActive)
+  const isMainWiredActive = useBroadcastStore((s) => s.isMainWiredActive)
+  const isAltWiredActive = useBroadcastStore((s) => s.isAltWiredActive)
   const toggleWiredDisplay = useBroadcastStore((s) => s.toggleWiredDisplay)
   const themes = useBroadcastStore((s) => s.themes)
   const activeThemeId = useBroadcastStore((s) => s.activeThemeId)
@@ -59,7 +61,13 @@ export function LiveOutputPanel() {
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => toggleWiredDisplay()}
-            title={isWiredActive ? "Wired broadcast active (Click to disconnect)" : "Connect wired broadcast (Projector/HDMI)"}
+            title={
+              isMainWiredActive && isAltWiredActive
+                ? "2 HDMI Screens Active (HDMI 1 Main + HDMI 2 Alt). Click to disconnect both."
+                : isWiredActive
+                  ? "1 HDMI Screen Active. Click to connect both HDMI screens."
+                  : "Connect 2 HDMI Screens (HDMI 1 Projector + HDMI 2 Alternative)"
+            }
             className={cn(
               "flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[0.5625rem] font-medium uppercase tracking-wider transition-all border",
               isWiredActive
@@ -68,7 +76,13 @@ export function LiveOutputPanel() {
             )}
           >
             <TvIcon className="size-2.5" />
-            <span>{isWiredActive ? "Wired: Live" : "Wired"}</span>
+            <span>
+              {isMainWiredActive && isAltWiredActive
+                ? "2 Screens Live"
+                : isWiredActive
+                  ? "1 Screen Live"
+                  : "2 HDMI Screens"}
+            </span>
           </button>
           <button
             onClick={() => useBroadcastStore.getState().setLive(!isLive)}

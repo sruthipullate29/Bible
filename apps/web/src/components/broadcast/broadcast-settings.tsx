@@ -50,6 +50,11 @@ export function BroadcastSettings({
   const altEnabled = useBroadcastStore((s) => s.altEnabled)
   const wiredAutoConnect = useBroadcastStore((s) => s.wiredAutoConnect)
   const setWiredAutoConnect = useBroadcastStore((s) => s.setWiredAutoConnect)
+  const mainWiredDisplayId = useBroadcastStore((s) => s.mainWiredDisplayId)
+  const altWiredDisplayId = useBroadcastStore((s) => s.altWiredDisplayId)
+  const setMainWiredDisplayId = useBroadcastStore((s) => s.setMainWiredDisplayId)
+  const setAltWiredDisplayId = useBroadcastStore((s) => s.setAltWiredDisplayId)
+  const openBothWiredDisplays = useBroadcastStore((s) => s.openBothWiredDisplays)
 
   const [mainThemeId, setMainThemeId] = useState(activeThemeId)
   const [mainCopied, setMainCopied] = useState(false)
@@ -57,15 +62,32 @@ export function BroadcastSettings({
   const [altThemeId, setAltThemeId] = useState(altActiveThemeId)
   const [altCopied, setAltCopied] = useState(false)
 
-  // Wired display state
+  // Wired display state - Main Screen (HDMI 1)
   const [displays, setDisplays] = useState<DisplayInfo[]>([])
-  const [selectedDisplayId, setSelectedDisplayId] = useState<string>("")
-  const [wiredOutputMode, setWiredOutputMode] = useState<"main" | "alt">("main")
-  const [wiredFullscreen, setWiredFullscreen] = useState(true)
-  const [wiredAlwaysOnTop, setWiredAlwaysOnTop] = useState(true)
-  const [isWiredActive, setIsWiredActive] = useState(false)
-  const [activeWiredDisplayId, setActiveWiredDisplayId] = useState<number | null>(null)
+  const [mainDisplayId, setMainDisplayIdState] = useState<string>(mainWiredDisplayId ? String(mainWiredDisplayId) : "")
+  const [mainFullscreen, setMainFullscreen] = useState(true)
+  const [mainAlwaysOnTop, setMainAlwaysOnTop] = useState(true)
+  const [isMainWiredActive, setIsMainWiredActive] = useState(false)
+  const [activeMainDisplayId, setActiveMainDisplayId] = useState<number | null>(null)
+
+  // Wired display state - Alternative Screen (HDMI 2)
+  const [altDisplayId, setAltDisplayIdState] = useState<string>(altWiredDisplayId ? String(altWiredDisplayId) : "")
+  const [altFullscreen, setAltFullscreen] = useState(true)
+  const [altAlwaysOnTop, setAltAlwaysOnTop] = useState(true)
+  const [isAltWiredActive, setIsAltWiredActive] = useState(false)
+  const [activeAltDisplayId, setActiveAltDisplayId] = useState<number | null>(null)
+
   const [loadingDisplays, setLoadingDisplays] = useState(false)
+
+  const handleSelectMainDisplay = (id: string) => {
+    setMainDisplayIdState(id)
+    setMainWiredDisplayId(id)
+  }
+
+  const handleSelectAltDisplay = (id: string) => {
+    setAltDisplayIdState(id)
+    setAltWiredDisplayId(id)
+  }
 
   // Wireless network state
   const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null)
@@ -80,24 +102,52 @@ export function BroadcastSettings({
     try {
       const list = await window.electronAPI.getDisplays()
       setDisplays(list)
-      if (list.length > 0 && !selectedDisplayId) {
-        // Default to non-primary display (e.g. HDMI projector) if available
-        const nonPrimary = list.find((d) => !d.isPrimary)
-        setSelectedDisplayId(String(nonPrimary ? nonPrimary.id : list[0].id))
+      if (list.length > 0) {
+        const nonPrimaryDisplays = list.filter((d) => !d.isPrimary)
+
+        let mId = mainDisplayId
+        if (!mId || !list.some((d) => String(d.id) === mId)) {
+          // Default HDMI 1 / Main Screen to first external display (or primary if only 1)
+          const mainTarget = nonPrimaryDisplays[0] || list[0]
+          mId = String(mainTarget.id)
+          setMainDisplayIdState(mId)
+          setMainWiredDisplayId(mId)
+        }
+
+        let aId = altDisplayId
+        if (!aId || !list.some((d) => String(d.id) === aId)) {
+          // Default HDMI 2 / Alt Screen to second external display (or nonPrimary, or primary)
+          const altTarget = nonPrimaryDisplays[1] || nonPrimaryDisplays[0] || list[0]
+          aId = String(altTarget.id)
+          setAltDisplayIdState(aId)
+          setAltWiredDisplayId(aId)
+        }
       }
     } catch (e) {
       console.error("[broadcast] Failed to fetch displays:", e)
     } finally {
       setLoadingDisplays(false)
     }
-  }, [selectedDisplayId])
+  }, [mainDisplayId, altDisplayId, setMainWiredDisplayId, setAltWiredDisplayId])
 
   const checkWiredStatus = useCallback(async () => {
     if (typeof window === "undefined" || !window.electronAPI?.getWiredDisplayStatus) return
     try {
       const status = await window.electronAPI.getWiredDisplayStatus()
-      setIsWiredActive(status.active)
-      setActiveWiredDisplayId(status.displayId)
+      if (status.status) {
+        setIsMainWiredActive(status.status.main.active)
+        setActiveMainDisplayId(status.status.main.displayId)
+        setIsAltWiredActive(status.status.alt.active)
+        setActiveAltDisplayId(status.status.alt.displayId)
+      } else if (status.main || status.alt) {
+        setIsMainWiredActive(status.main?.active ?? false)
+        setActiveMainDisplayId(status.main?.displayId ?? null)
+        setIsAltWiredActive(status.alt?.active ?? false)
+        setActiveAltDisplayId(status.alt?.displayId ?? null)
+      } else {
+        setIsMainWiredActive(status.active)
+        setActiveMainDisplayId(status.displayId)
+      }
     } catch {
       // ignore
     }
@@ -150,53 +200,75 @@ export function BroadcastSettings({
   useEffect(() => {
     if (typeof window !== "undefined" && window.electronAPI?.onWiredDisplayStatusChange) {
       const unsubscribe = window.electronAPI.onWiredDisplayStatusChange((status) => {
-        setIsWiredActive(status.active)
-        setActiveWiredDisplayId(status.displayId)
+        if (status.status) {
+          setIsMainWiredActive(status.status.main.active)
+          setActiveMainDisplayId(status.status.main.displayId)
+          setIsAltWiredActive(status.status.alt.active)
+          setActiveAltDisplayId(status.status.alt.displayId)
+        } else if (status.output === "alt") {
+          setIsAltWiredActive(status.active)
+          setActiveAltDisplayId(status.displayId)
+        } else if (status.output === "main") {
+          setIsMainWiredActive(status.active)
+          setActiveMainDisplayId(status.displayId)
+        } else {
+          setIsMainWiredActive(status.active)
+          setActiveMainDisplayId(status.displayId)
+        }
       })
       return unsubscribe
     }
   }, [])
 
-  const handleStartWired = async () => {
-    if (typeof window === "undefined" || !window.electronAPI?.openWiredDisplay) {
-      // Web fallback: open in a popup window
-      const url = `${window.location.origin}/overlay.html?role=overlay&output=${wiredOutputMode}&session=${sessionId}`
-      window.open(url, "SharonAG_Wired_Overlay", "width=1280,height=720,menubar=no,toolbar=no")
-      setIsWiredActive(true)
-      return
-    }
-
-    try {
-      const res = await window.electronAPI.openWiredDisplay({
-        displayId: selectedDisplayId ? Number(selectedDisplayId) : undefined,
-        options: {
-          fullscreen: wiredFullscreen,
-          alwaysOnTop: wiredAlwaysOnTop,
-          output: wiredOutputMode,
-          session: sessionId,
-        },
-      })
-      if (res.success) {
-        setIsWiredActive(true)
-        if (res.displayId) setActiveWiredDisplayId(res.displayId)
-      }
-    } catch (e) {
-      console.error("[broadcast] Failed to start wired display:", e)
-    }
+  const handleStartMainWired = async () => {
+    await useBroadcastStore.getState().openWiredDisplay(
+      mainDisplayId ? Number(mainDisplayId) : undefined,
+      "main",
+      { fullscreen: mainFullscreen, alwaysOnTop: mainAlwaysOnTop }
+    )
+    setIsMainWiredActive(true)
+    if (mainDisplayId) setActiveMainDisplayId(Number(mainDisplayId))
   }
 
-  const handleStopWired = async () => {
-    if (typeof window === "undefined" || !window.electronAPI?.closeWiredDisplay) {
-      setIsWiredActive(false)
-      return
-    }
-    try {
-      await window.electronAPI.closeWiredDisplay()
-      setIsWiredActive(false)
-      setActiveWiredDisplayId(null)
-    } catch (e) {
-      console.error("[broadcast] Failed to stop wired display:", e)
-    }
+  const handleStopMainWired = async () => {
+    await useBroadcastStore.getState().closeWiredDisplay("main")
+    setIsMainWiredActive(false)
+    setActiveMainDisplayId(null)
+  }
+
+  const handleStartAltWired = async () => {
+    await useBroadcastStore.getState().openWiredDisplay(
+      altDisplayId ? Number(altDisplayId) : undefined,
+      "alt",
+      { fullscreen: altFullscreen, alwaysOnTop: altAlwaysOnTop }
+    )
+    setIsAltWiredActive(true)
+    if (altDisplayId) setActiveAltDisplayId(Number(altDisplayId))
+  }
+
+  const handleStopAltWired = async () => {
+    await useBroadcastStore.getState().closeWiredDisplay("alt")
+    setIsAltWiredActive(false)
+    setActiveAltDisplayId(null)
+  }
+
+  const handleStartBothWired = async () => {
+    await openBothWiredDisplays({
+      fullscreen: mainFullscreen,
+      alwaysOnTop: mainAlwaysOnTop,
+    })
+    setIsMainWiredActive(true)
+    setIsAltWiredActive(true)
+    if (mainDisplayId) setActiveMainDisplayId(Number(mainDisplayId))
+    if (altDisplayId) setActiveAltDisplayId(Number(altDisplayId))
+  }
+
+  const handleStopBothWired = async () => {
+    await useBroadcastStore.getState().closeWiredDisplay()
+    setIsMainWiredActive(false)
+    setIsAltWiredActive(false)
+    setActiveMainDisplayId(null)
+    setActiveAltDisplayId(null)
   }
 
   const handleMainThemeChange = (id: string) => {
@@ -242,10 +314,14 @@ export function BroadcastSettings({
                 </DialogDescription>
               </div>
             </div>
-            {isWiredActive && (
+            {(isMainWiredActive || isAltWiredActive) && (
               <Badge variant="outline" className="gap-1.5 border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs">
                 <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-                Wired Output Active
+                {isMainWiredActive && isAltWiredActive
+                  ? "Main & Alt Outputs Active"
+                  : isMainWiredActive
+                  ? "Main Output Active"
+                  : "Alt Output Active"}
               </Badge>
             )}
           </div>
@@ -268,154 +344,268 @@ export function BroadcastSettings({
           </TabsList>
 
           {/* ─────────────────────────────────────────────────────────────
-              TAB 1: WIRED BROADCAST
+              TAB 1: WIRED BROADCAST (MAIN & ALTERNATIVE SCREENS)
           ───────────────────────────────────────────────────────────── */}
           <TabsContent value="wired" className="mt-4 space-y-4">
             <div className="rounded-lg border border-border bg-card p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="text-sm font-medium flex items-center gap-2">
+                  <h4 className="text-sm font-semibold flex items-center gap-2">
                     <MonitorIcon className="size-4 text-primary" />
-                    Direct Wired Screen Output
+                    Direct Wired Screen Outputs (Main & Alternative)
                   </h4>
-                  <p className="text-xs text-muted-foreground">
-                    Launch a borderless fullscreen presentation window directly onto your church projector, TV, or secondary display via HDMI/cable.
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Launch independent borderless presentation windows to both your Main Projector and Alternative/Stage screen via HDMI/cable.
                   </p>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={refreshDisplays}
-                  disabled={loadingDisplays}
-                  className="gap-1.5 text-xs h-8"
-                >
-                  <RefreshCwIcon className={cn("size-3", loadingDisplays && "animate-spin")} />
-                  Refresh Displays
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                {/* Display Selection */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Target Display / Projector
-                  </label>
-                  <Select
-                    value={selectedDisplayId}
-                    onValueChange={setSelectedDisplayId}
-                    disabled={displays.length === 0}
+                <div className="flex items-center gap-2">
+                  {(!isMainWiredActive || !isAltWiredActive) && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={handleStartBothWired}
+                      className="gap-1.5 text-xs h-8 bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
+                    >
+                      <PlayIcon className="size-3 fill-current" />
+                      Launch Both HDMI Screens
+                    </Button>
+                  )}
+                  {(isMainWiredActive || isAltWiredActive) && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleStopBothWired}
+                      className="gap-1.5 text-xs h-8"
+                    >
+                      <SquareIcon className="size-3 fill-current" />
+                      Stop All Screens
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={refreshDisplays}
+                    disabled={loadingDisplays}
+                    className="gap-1.5 text-xs h-8"
                   >
-                    <SelectTrigger className="w-full text-xs">
-                      <SelectValue placeholder={displays.length === 0 ? "Detecting monitors..." : "Select display"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {displays.map((d) => (
-                        <SelectItem key={d.id} value={String(d.id)} className="text-xs">
-                          {d.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[0.6875rem] text-muted-foreground">
-                    {displays.length > 1
-                      ? "Select the secondary display (HDMI/Projector) to present."
-                      : "Only 1 display detected. You can open a window and drag it to any screen."}
-                  </p>
-                </div>
-
-                {/* Output Mode */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Broadcast Feed
-                  </label>
-                  <Select
-                    value={wiredOutputMode}
-                    onValueChange={(v) => setWiredOutputMode(v as "main" | "alt")}
-                  >
-                    <SelectTrigger className="w-full text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="main" className="text-xs">Main Output Feed</SelectItem>
-                      <SelectItem value="alt" className="text-xs">Alternate Output Feed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[0.6875rem] text-muted-foreground">
-                    Feed source configured in the Themes & Outputs tab.
-                  </p>
+                    <RefreshCwIcon className={cn("size-3", loadingDisplays && "animate-spin")} />
+                    Refresh Displays
+                  </Button>
                 </div>
               </div>
 
-              {/* Window Options */}
-              <div className="flex flex-wrap items-center gap-6 pt-2 border-t border-border/50 text-xs">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={wiredFullscreen}
-                    onCheckedChange={setWiredFullscreen}
-                    id="fullscreen-toggle"
-                  />
-                  <label htmlFor="fullscreen-toggle" className="cursor-pointer text-muted-foreground hover:text-foreground">
-                    Fullscreen (Borderless)
-                  </label>
+              {/* Grid with 2 distinct cards: Main Screen (HDMI 1) and Alternative Screen (HDMI 2) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                {/* 1. Main Output Screen Card */}
+                <div className="rounded-md border border-border/80 bg-background/50 p-3.5 space-y-3 flex flex-col justify-between">
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <MonitorIcon className="size-4 text-primary" />
+                        <span className="text-xs font-bold text-foreground">Main Screen (Projector)</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="outline" className="text-[10px] font-bold border-primary/30 bg-primary/10 text-primary px-1.5 py-0.5">
+                          HDMI 1
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px] font-semibold px-2 py-0.5",
+                            isMainWiredActive
+                              ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-500"
+                              : "border-border text-muted-foreground"
+                          )}
+                        >
+                          {isMainWiredActive ? `Active on Display ${activeMainDisplayId ?? ""}` : "Inactive"}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-muted-foreground">
+                        Target Monitor / Projector (HDMI 1)
+                      </label>
+                      <Select
+                        value={mainDisplayId}
+                        onValueChange={handleSelectMainDisplay}
+                        disabled={displays.length === 0}
+                      >
+                        <SelectTrigger className="w-full text-xs h-8">
+                          <SelectValue placeholder={displays.length === 0 ? "Detecting monitors..." : "Select display"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {displays.map((d) => (
+                            <SelectItem key={d.id} value={String(d.id)} className="text-xs">
+                              {d.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-4 pt-1 text-[11px]">
+                      <div className="flex items-center gap-1.5">
+                        <Switch
+                          checked={mainFullscreen}
+                          onCheckedChange={setMainFullscreen}
+                          id="main-fullscreen-toggle"
+                        />
+                        <label htmlFor="main-fullscreen-toggle" className="cursor-pointer text-muted-foreground hover:text-foreground">
+                          Fullscreen
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Switch
+                          checked={mainAlwaysOnTop}
+                          onCheckedChange={setMainAlwaysOnTop}
+                          id="main-aot-toggle"
+                        />
+                        <label htmlFor="main-aot-toggle" className="cursor-pointer text-muted-foreground hover:text-foreground">
+                          Always On Top
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-border/40">
+                    {isMainWiredActive ? (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="w-full gap-2 text-xs h-8"
+                        onClick={handleStopMainWired}
+                      >
+                        <SquareIcon className="size-3.5 fill-current" />
+                        Stop Main Screen (HDMI 1)
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="w-full gap-2 text-xs h-8"
+                        onClick={handleStartMainWired}
+                      >
+                        <PlayIcon className="size-3.5 fill-current" />
+                        Launch Main Screen (HDMI 1)
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={wiredAlwaysOnTop}
-                    onCheckedChange={setWiredAlwaysOnTop}
-                    id="always-on-top-toggle"
-                  />
-                  <label htmlFor="always-on-top-toggle" className="cursor-pointer text-muted-foreground hover:text-foreground">
-                    Always On Top
-                  </label>
-                </div>
+                {/* 2. Alternative Output Screen Card */}
+                <div className="rounded-md border border-border/80 bg-background/50 p-3.5 space-y-3 flex flex-col justify-between">
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <TvIcon className="size-4 text-amber-500" />
+                        <span className="text-xs font-bold text-foreground">Alternative Screen (Stage / Lower Third)</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="outline" className="text-[10px] font-bold border-amber-500/30 bg-amber-500/10 text-amber-500 px-1.5 py-0.5">
+                          HDMI 2
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px] font-semibold px-2 py-0.5",
+                            isAltWiredActive
+                              ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-500"
+                              : "border-border text-muted-foreground"
+                          )}
+                        >
+                          {isAltWiredActive ? `Active on Display ${activeAltDisplayId ?? ""}` : "Inactive"}
+                        </Badge>
+                      </div>
+                    </div>
 
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-muted-foreground">
+                        Target Monitor / Screen (HDMI 2)
+                      </label>
+                      <Select
+                        value={altDisplayId}
+                        onValueChange={handleSelectAltDisplay}
+                        disabled={displays.length === 0}
+                      >
+                        <SelectTrigger className="w-full text-xs h-8">
+                          <SelectValue placeholder={displays.length === 0 ? "Detecting monitors..." : "Select display"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {displays.map((d) => (
+                            <SelectItem key={d.id} value={String(d.id)} className="text-xs">
+                              {d.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-4 pt-1 text-[11px]">
+                      <div className="flex items-center gap-1.5">
+                        <Switch
+                          checked={altFullscreen}
+                          onCheckedChange={setAltFullscreen}
+                          id="alt-fullscreen-toggle"
+                        />
+                        <label htmlFor="alt-fullscreen-toggle" className="cursor-pointer text-muted-foreground hover:text-foreground">
+                          Fullscreen
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Switch
+                          checked={altAlwaysOnTop}
+                          onCheckedChange={setAltAlwaysOnTop}
+                          id="alt-aot-toggle"
+                        />
+                        <label htmlFor="alt-aot-toggle" className="cursor-pointer text-muted-foreground hover:text-foreground">
+                          Always On Top
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-border/40">
+                    {isAltWiredActive ? (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="w-full gap-2 text-xs h-8"
+                        onClick={handleStopAltWired}
+                      >
+                        <SquareIcon className="size-3.5 fill-current" />
+                        Stop Alternative Screen (HDMI 2)
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="w-full gap-2 text-xs h-8 border border-amber-500/40 bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25"
+                        onClick={handleStartAltWired}
+                      >
+                        <PlayIcon className="size-3.5 fill-current" />
+                        Launch Alternative Screen (HDMI 2)
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Global Auto-connect Option */}
+              <div className="pt-2 border-t border-border/50 flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2">
                   <Switch
                     checked={wiredAutoConnect}
                     onCheckedChange={setWiredAutoConnect}
                     id="auto-connect-toggle"
                   />
-                  <label htmlFor="auto-connect-toggle" className="cursor-pointer text-muted-foreground hover:text-foreground">
-                    Auto-connect on "Go Live"
+                  <label htmlFor="auto-connect-toggle" className="cursor-pointer text-muted-foreground hover:text-foreground font-medium">
+                    Auto-launch both HDMI screens (Main & Alternative) when pressing "Go Live"
                   </label>
                 </div>
-              </div>
-
-              {/* Action Button */}
-              <div className="pt-2 flex items-center justify-between">
-                <div className="text-xs text-muted-foreground">
-                  Status:{" "}
-                  {isWiredActive ? (
-                    <span className="font-semibold text-emerald-400">
-                      Active {activeWiredDisplayId ? `on Display ${activeWiredDisplayId}` : ""}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">Inactive (Ready to launch)</span>
-                  )}
+                <div className="text-[11px] text-muted-foreground">
+                  Outputs mirror what is configured in Themes & Outputs
                 </div>
-
-                {isWiredActive ? (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="gap-2 text-xs"
-                    onClick={handleStopWired}
-                  >
-                    <SquareIcon className="size-3.5 fill-current" />
-                    Stop Wired Output
-                  </Button>
-                ) : (
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="gap-2 text-xs"
-                    onClick={handleStartWired}
-                  >
-                    <PlayIcon className="size-3.5 fill-current" />
-                    Launch on Projector (Wired)
-                  </Button>
-                )}
               </div>
             </div>
           </TabsContent>

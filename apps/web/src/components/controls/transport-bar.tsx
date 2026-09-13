@@ -16,6 +16,8 @@ export function TransportBar() {
   const audioLevel = useAudioStore((s) => s.level)
   const isTranscribing = useTranscriptStore((s) => s.isTranscribing)
   const isWiredActive = useBroadcastStore((s) => s.isWiredActive)
+  const isMainWiredActive = useBroadcastStore((s) => s.isMainWiredActive)
+  const isAltWiredActive = useBroadcastStore((s) => s.isAltWiredActive)
   const toggleWiredDisplay = useBroadcastStore((s) => s.toggleWiredDisplay)
   const [broadcastOpen, setBroadcastOpen] = useState(false)
 
@@ -70,11 +72,23 @@ export function TransportBar() {
               ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30"
               : "text-muted-foreground hover:text-foreground border border-border/50"
           )}
-          title={isWiredActive ? "Wired Projector Active (Click to disconnect)" : "Connect Wired Broadcast (HDMI/Projector)"}
+          title={
+            isMainWiredActive && isAltWiredActive
+              ? "2 HDMI Screens Active (HDMI 1 Main + HDMI 2 Alt). Click to disconnect both."
+              : isWiredActive
+                ? "1 HDMI Screen Active. Click to connect both HDMI screens."
+                : "Connect 2 HDMI Screens (HDMI 1 Projector + HDMI 2 Alternative)"
+          }
           onClick={() => toggleWiredDisplay()}
         >
           <TvIcon className={cn("size-3.5", isWiredActive && "text-emerald-400 animate-pulse")} />
-          <span>{isWiredActive ? "Wired Live" : "Wired Projector"}</span>
+          <span>
+            {isMainWiredActive && isAltWiredActive
+              ? "2 Screens Live"
+              : isWiredActive
+                ? "1 Screen Live"
+                : "2 HDMI Screens"}
+          </span>
         </Button>
         <Button
           variant="ghost"

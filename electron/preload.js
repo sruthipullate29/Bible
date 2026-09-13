@@ -16,11 +16,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openWiredDisplay: (args) =>
     ipcRenderer.invoke('wired-display:open', args),
 
-  closeWiredDisplay: () =>
-    ipcRenderer.invoke('wired-display:close'),
+  closeWiredDisplay: (args) =>
+    ipcRenderer.invoke('wired-display:close', args),
 
-  getWiredDisplayStatus: () =>
-    ipcRenderer.invoke('wired-display:status'),
+  getWiredDisplayStatus: (args) =>
+    ipcRenderer.invoke('wired-display:status', args),
 
   getNetworkInfo: () =>
     ipcRenderer.invoke('network:get-ips'),

@@ -11,6 +11,9 @@ interface PersistedBroadcastSettings {
   altActiveThemeId?: string
   mainEnabled?: boolean
   altEnabled?: boolean
+  mainWiredDisplayId?: string | number | null
+  altWiredDisplayId?: string | number | null
+  wiredAutoConnect?: boolean
 }
 
 function loadBroadcastSettings(): PersistedBroadcastSettings {
@@ -23,9 +26,10 @@ function loadBroadcastSettings(): PersistedBroadcastSettings {
   return {}
 }
 
-function persistBroadcastSettings(settings: Required<PersistedBroadcastSettings>) {
+function persistBroadcastSettings(settings: Partial<PersistedBroadcastSettings>) {
   try {
-    localStorage.setItem(BROADCAST_SETTINGS_KEY, JSON.stringify(settings))
+    const current = loadBroadcastSettings()
+    localStorage.setItem(BROADCAST_SETTINGS_KEY, JSON.stringify({ ...current, ...settings }))
   } catch {
     // ignore storage errors
   }
@@ -77,13 +81,26 @@ interface BroadcastState {
 
   // Wired display state
   isWiredActive: boolean
-  wiredDisplayId: number | null
+  wiredDisplayId: number | string | null
+  isMainWiredActive: boolean
+  mainWiredDisplayId: number | string | null
+  isAltWiredActive: boolean
+  altWiredDisplayId: number | string | null
   wiredAutoConnect: boolean
   setWiredAutoConnect: (auto: boolean) => void
-  setWiredActive: (active: boolean, displayId?: number | null) => void
-  openWiredDisplay: (displayId?: number | string) => Promise<void>
-  closeWiredDisplay: () => Promise<void>
-  toggleWiredDisplay: () => Promise<void>
+  setMainWiredDisplayId: (id: number | string | null) => void
+  setAltWiredDisplayId: (id: number | string | null) => void
+  setWiredActive: (active: boolean, displayId?: number | string | null, output?: "main" | "alt") => void
+  openWiredDisplay: (
+    displayId?: number | string,
+    output?: "main" | "alt",
+    options?: { fullscreen?: boolean; alwaysOnTop?: boolean }
+  ) => Promise<void>
+  openBothWiredDisplays: (
+    options?: { fullscreen?: boolean; alwaysOnTop?: boolean }
+  ) => Promise<void>
+  closeWiredDisplay: (output?: "main" | "alt") => Promise<void>
+  toggleWiredDisplay: (output?: "main" | "alt") => Promise<void>
 
   // Designer state
   isDesignerOpen: boolean
@@ -149,7 +166,8 @@ function setNestedValue(obj: Record<string, unknown>, path: string, value: unkno
 
 const initialThemes = loadThemesFromStorage()
 const savedBroadcast = loadBroadcastSettings()
-let browserWiredPopup: Window | null = null
+let browserMainWiredPopup: Window | null = null
+let browserAltWiredPopup: Window | null = null
 
 export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   themes: initialThemes,
@@ -319,74 +337,207 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   // Wired display
   isWiredActive: false,
   wiredDisplayId: null,
-  wiredAutoConnect: true,
-  setWiredAutoConnect: (wiredAutoConnect) => set({ wiredAutoConnect }),
-  setWiredActive: (isWiredActive, wiredDisplayId = null) => set({ isWiredActive, wiredDisplayId }),
-  openWiredDisplay: async (displayId) => {
+  isMainWiredActive: false,
+  mainWiredDisplayId: savedBroadcast.mainWiredDisplayId ?? null,
+  isAltWiredActive: false,
+  altWiredDisplayId: savedBroadcast.altWiredDisplayId ?? null,
+  wiredAutoConnect: savedBroadcast.wiredAutoConnect ?? true,
+  setWiredAutoConnect: (wiredAutoConnect) => {
+    set({ wiredAutoConnect })
+    persistBroadcastSettings({ wiredAutoConnect })
+  },
+  setMainWiredDisplayId: (mainWiredDisplayId) => {
+    set({ mainWiredDisplayId })
+    persistBroadcastSettings({ mainWiredDisplayId })
+  },
+  setAltWiredDisplayId: (altWiredDisplayId) => {
+    set({ altWiredDisplayId })
+    persistBroadcastSettings({ altWiredDisplayId })
+  },
+  setWiredActive: (isWiredActive, wiredDisplayId = null, output = "main") => {
+    if (output === "alt") {
+      set((s) => ({
+        isAltWiredActive: isWiredActive,
+        altWiredDisplayId: wiredDisplayId,
+        isWiredActive: s.isMainWiredActive || isWiredActive,
+        wiredDisplayId: s.mainWiredDisplayId || wiredDisplayId,
+      }))
+    } else {
+      set((s) => ({
+        isMainWiredActive: isWiredActive,
+        mainWiredDisplayId: wiredDisplayId,
+        isWiredActive: isWiredActive || s.isAltWiredActive,
+        wiredDisplayId: wiredDisplayId || s.altWiredDisplayId,
+      }))
+    }
+  },
+  openWiredDisplay: async (displayId, output = "main", options = {}) => {
+    const isAlt = output === "alt"
     if (typeof window !== "undefined" && window.electronAPI?.openWiredDisplay) {
       try {
         const res = await window.electronAPI.openWiredDisplay({
           displayId,
           options: {
-            fullscreen: true,
-            alwaysOnTop: true,
-            output: "main",
+            fullscreen: options.fullscreen !== false,
+            alwaysOnTop: options.alwaysOnTop ?? true,
+            output,
             session: getSessionId(),
           },
         })
         if (res.success) {
-          set({ isWiredActive: true, wiredDisplayId: res.displayId ?? null })
+          if (isAlt) {
+            set((s) => ({
+              isAltWiredActive: true,
+              altWiredDisplayId: res.displayId ?? s.altWiredDisplayId ?? null,
+              isWiredActive: true,
+              wiredDisplayId: s.mainWiredDisplayId ?? res.displayId ?? null,
+            }))
+          } else {
+            set((s) => ({
+              isMainWiredActive: true,
+              mainWiredDisplayId: res.displayId ?? s.mainWiredDisplayId ?? null,
+              isWiredActive: true,
+              wiredDisplayId: res.displayId ?? null,
+            }))
+          }
+          get().syncBroadcastOutput()
+          setTimeout(() => get().syncBroadcastOutput(), 800)
         }
       } catch (err) {
-        console.error("[broadcast] Failed to open wired display:", err)
+        console.error(`[broadcast] Failed to open wired display for ${output}:`, err)
       }
     } else if (typeof window !== "undefined") {
       try {
-        const url = `${window.location.origin}/overlay.html?role=overlay&output=main&session=${getSessionId()}`
-        if (browserWiredPopup && !browserWiredPopup.closed) {
-          browserWiredPopup.focus()
+        const url = `${window.location.origin}/overlay.html?role=overlay&output=${output}&session=${getSessionId()}`
+        const popupName = isAlt ? "SharonAG_Wired_Alt_Overlay" : "SharonAG_Wired_Main_Overlay"
+        let popup = isAlt ? browserAltWiredPopup : browserMainWiredPopup
+
+        if (popup && !popup.closed) {
+          popup.focus()
         } else {
-          browserWiredPopup = window.open(
+          popup = window.open(
             url,
-            "SharonAG_Wired_Overlay",
+            popupName,
             "width=1920,height=1080,menubar=no,toolbar=no,location=no,status=no"
           )
+          if (isAlt) {
+            browserAltWiredPopup = popup
+          } else {
+            browserMainWiredPopup = popup
+          }
         }
-        set({ isWiredActive: true, wiredDisplayId: 1 })
+        if (isAlt) {
+          set((s) => ({
+            isAltWiredActive: true,
+            altWiredDisplayId: 2,
+            isWiredActive: true,
+            wiredDisplayId: s.mainWiredDisplayId ?? 2,
+          }))
+        } else {
+          set({
+            isMainWiredActive: true,
+            mainWiredDisplayId: 1,
+            isWiredActive: true,
+            wiredDisplayId: 1,
+          })
+        }
+        get().syncBroadcastOutput()
+        setTimeout(() => get().syncBroadcastOutput(), 800)
       } catch (err) {
-        console.error("[broadcast] Failed to open wired window popup:", err)
+        console.error(`[broadcast] Failed to open wired window popup for ${output}:`, err)
       }
     }
   },
-  closeWiredDisplay: async () => {
+  openBothWiredDisplays: async (options = {}) => {
+    const s = get()
+    // Open Main screen first
+    await s.openWiredDisplay(s.mainWiredDisplayId ?? undefined, "main", options)
+    // Open Alt screen second
+    await s.openWiredDisplay(s.altWiredDisplayId ?? undefined, "alt", options)
+  },
+  closeWiredDisplay: async (output) => {
     if (typeof window !== "undefined" && window.electronAPI?.closeWiredDisplay) {
       try {
-        await window.electronAPI.closeWiredDisplay()
-        set({ isWiredActive: false, wiredDisplayId: null })
+        await window.electronAPI.closeWiredDisplay(output ? { output } : undefined)
+        if (!output) {
+          set({
+            isWiredActive: false,
+            wiredDisplayId: null,
+            isMainWiredActive: false,
+            mainWiredDisplayId: null,
+            isAltWiredActive: false,
+            altWiredDisplayId: null,
+          })
+        } else if (output === "alt") {
+          set((s) => ({
+            isAltWiredActive: false,
+            altWiredDisplayId: null,
+            isWiredActive: s.isMainWiredActive,
+            wiredDisplayId: s.mainWiredDisplayId,
+          }))
+        } else {
+          set((s) => ({
+            isMainWiredActive: false,
+            mainWiredDisplayId: null,
+            isWiredActive: s.isAltWiredActive,
+            wiredDisplayId: s.altWiredDisplayId,
+          }))
+        }
       } catch (err) {
-        console.error("[broadcast] Failed to close wired display:", err)
+        console.error(`[broadcast] Failed to close wired display for ${output}:`, err)
       }
     } else {
-      if (browserWiredPopup && !browserWiredPopup.closed) {
-        browserWiredPopup.close()
-        browserWiredPopup = null
+      if (!output || output === "main") {
+        if (browserMainWiredPopup && !browserMainWiredPopup.closed) {
+          browserMainWiredPopup.close()
+          browserMainWiredPopup = null
+        }
+        set((s) => ({
+          isMainWiredActive: false,
+          mainWiredDisplayId: null,
+          isWiredActive: output ? s.isAltWiredActive : false,
+          wiredDisplayId: output ? s.altWiredDisplayId : null,
+        }))
       }
-      set({ isWiredActive: false, wiredDisplayId: null })
+      if (!output || output === "alt") {
+        if (browserAltWiredPopup && !browserAltWiredPopup.closed) {
+          browserAltWiredPopup.close()
+          browserAltWiredPopup = null
+        }
+        set((s) => ({
+          isAltWiredActive: false,
+          altWiredDisplayId: null,
+          isWiredActive: output ? s.isMainWiredActive : false,
+          wiredDisplayId: output ? s.mainWiredDisplayId : null,
+        }))
+      }
     }
   },
-  toggleWiredDisplay: async () => {
+  toggleWiredDisplay: async (output) => {
     const s = get()
-    if (s.isWiredActive) {
+    if (output) {
+      const active = output === "alt" ? s.isAltWiredActive : s.isMainWiredActive
+      if (active) {
+        await s.closeWiredDisplay(output)
+      } else {
+        const targetId = output === "alt" ? s.altWiredDisplayId : s.mainWiredDisplayId
+        await s.openWiredDisplay(targetId ?? undefined, output)
+      }
+      return
+    }
+
+    // Default without argument: toggle both screens
+    if (s.isMainWiredActive && s.isAltWiredActive) {
       await s.closeWiredDisplay()
     } else {
-      await s.openWiredDisplay()
+      await s.openBothWiredDisplays()
     }
   },
 
   setLive: (isLive) => {
     set({ isLive })
     if (isLive && get().wiredAutoConnect) {
-      get().openWiredDisplay()
+      get().openBothWiredDisplays()
     }
   },
   setLiveVerse: (liveVerse) => {

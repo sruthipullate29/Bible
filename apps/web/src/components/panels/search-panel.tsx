@@ -207,6 +207,25 @@ export function SearchPanel() {
     bibleActions.loadBooks().catch(console.error)
   }, [])
 
+  // Auto-select Genesis (or first book) on load if no book is selected
+  useEffect(() => {
+    if (books.length > 0 && !selectedBook) {
+      const firstBook = books[0]
+      setSelectedBook(firstBook)
+      setChapter(1)
+    }
+  }, [books, selectedBook])
+
+  // Sync selectedBook when active translation changes
+  useEffect(() => {
+    if (selectedBook && books.length > 0) {
+      const match = books.find((b) => b.book_number === selectedBook.book_number)
+      if (match && match.id !== selectedBook.id) {
+        setSelectedBook(match)
+      }
+    }
+  }, [books, selectedBook])
+
   // Load chapter when book + chapter are set
   useEffect(() => {
     if (selectedBookNumber && chapter >= 1) {
@@ -271,8 +290,8 @@ export function SearchPanel() {
             .getElementById(`verse-${target.id}`)
             ?.scrollIntoView({ behavior: "smooth", block: "center" })
         }
-        // Focus panel and sync input unless this was a mid-typing autocomplete preview
-        if (focusAfterNavRef.current !== false) {
+        // Focus panel and sync input ONLY if this was an explicit user Enter/click navigation
+        if (focusAfterNavRef.current === true) {
           setQuickInput(`${book.name} ${navChapter}:${navVerse}`)
           panelRef.current?.focus()
         }
@@ -451,11 +470,15 @@ export function SearchPanel() {
       e.preventDefault()
       focusAfterNavRef.current = true
       const result = getAutocompleteSuggestion(quickInput, books)
-      if (result.matchedBook && result.chapter) {
-        const ref = result.verse
-          ? `${result.matchedBook.name} ${result.chapter}:${result.verse}`
-          : `${result.matchedBook.name} ${result.chapter}:`
-        setQuickInput(ref)
+      if (result.matchedBook) {
+        const ch = result.chapter || 1
+        const v = result.verse || 1
+        useBibleStore.getState().setPendingNavigation({
+          bookNumber: result.matchedBook.book_number,
+          chapter: ch,
+          verse: v,
+        })
+        setQuickInput(`${result.matchedBook.name} ${ch}:${v}`)
       } else {
         setQuickInput("")
       }
@@ -531,6 +554,43 @@ export function SearchPanel() {
 
         {activeTab === "book" ? (
           <div className="flex flex-1 items-center gap-2 min-w-0">
+            {/* Direct Book Selector Dropdown */}
+            {books.length > 0 && (
+              <Select
+                value={selectedBook ? String(selectedBook.book_number) : ""}
+                onValueChange={(val) => {
+                  const b = books.find((x) => String(x.book_number) === val)
+                  if (b) {
+                    applyNavigationSelection(b, 1)
+                    setSelectedVerseId(null)
+                    bibleActions.loadChapter(b.book_number, 1).catch(console.error)
+                  }
+                }}
+              >
+                <SelectTrigger size="sm" className="h-7 w-[120px] shrink-0 text-xs font-semibold bg-background">
+                  <SelectValue placeholder="Select Book" />
+                </SelectTrigger>
+                <SelectContent className="max-h-80">
+                  <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Old Testament
+                  </div>
+                  {books.filter((b) => b.book_number <= 39).map((b) => (
+                    <SelectItem key={b.id} value={String(b.book_number)} className="text-xs">
+                      {b.name}
+                    </SelectItem>
+                  ))}
+                  <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-t border-border/50 mt-1 pt-1.5">
+                    New Testament
+                  </div>
+                  {books.filter((b) => b.book_number >= 40).map((b) => (
+                    <SelectItem key={b.id} value={String(b.book_number)} className="text-xs">
+                      {b.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
             <div className="relative flex-1 min-w-[120px]">
               {quickSuggestion && quickSuggestion !== quickInput && (
                 <div className="absolute inset-0 flex items-center px-3 pointer-events-none z-10">
@@ -547,7 +607,7 @@ export function SearchPanel() {
                 value={quickInput}
                 onChange={(e) => setQuickInput(e.target.value)}
                 onKeyDown={handleQuickKeyDown}
-                placeholder="Type: John 3:16 or J 3:16"
+                placeholder="Type: 1 John 3:16, 1 Pet, or J 3:16"
                 className={cn(
                   "h-7 text-xs relative bg-background",
                   quickSuggestion && quickSuggestion !== quickInput ? "text-transparent" : ""
