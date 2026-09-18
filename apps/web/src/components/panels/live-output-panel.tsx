@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils"
 import { useBroadcastStore, useBibleStore } from "@/stores"
 import { deriveLiveVerse } from "@/hooks/use-broadcast"
 import { TvIcon } from "lucide-react"
+import type { Verse } from "@/types"
+
 
 export function LiveOutputPanel() {
   const isLive = useBroadcastStore((s) => s.isLive)
@@ -29,9 +31,17 @@ export function LiveOutputPanel() {
   const secondaryTranslation =
     translations.find((t) => t.id === secondaryTranslationId)?.abbreviation ?? "TEL"
 
-  const secondaryVerse = isDualMode && selectedVerse && secondaryChapter.length > 0
-    ? secondaryChapter.find((v) => v.verse === selectedVerse.verse) ?? null
-    : null
+  const secondaryVerseFromChapter =
+    isDualMode &&
+    selectedVerse &&
+    secondaryChapter.length > 0 &&
+    Number(secondaryChapter[0]?.book_number) === Number(selectedVerse.book_number) &&
+    Number(secondaryChapter[0]?.chapter) === Number(selectedVerse.chapter)
+      ? secondaryChapter.find((v) => Number(v.verse) === Number(selectedVerse.verse)) ?? null
+      : null
+
+  const secondaryVerse =
+    secondaryVerseFromChapter ?? ((selectedVerse as any)?.secondaryVerse as Verse | null) ?? null
 
   const verseData = useMemo(
     () =>

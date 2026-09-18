@@ -14,3 +14,5 @@ flake.lock
 Caddyfile
 apps/web/test-results
 dist-electron/
+openbeam-main/
+openbeam-main-BACKUP/

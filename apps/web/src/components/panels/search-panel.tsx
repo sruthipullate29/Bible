@@ -33,6 +33,7 @@ import type { Book, Verse } from "@/types"
 import { Input } from "@/components/ui/input"
 import { searchContextWithFuse, prefetchFuseIndex } from "@/lib/context-search"
 import { api } from "@/services"
+import { resolveBook } from "@/lib/bible-books"
 
 type SearchTab = "book" | "context"
 
@@ -85,42 +86,60 @@ const VerseRow = memo(function VerseRow({
       id={`verse-${verse.id}`}
       onClick={() => onClick(verse)}
       className={cn(
-        "group flex cursor-pointer items-start gap-3 rounded-lg p-3 transition-colors",
+        "group flex cursor-pointer items-start gap-3 rounded-lg p-3 transition-all",
         isSelected
-          ? "border border-primary/50 bg-primary/10"
-          : "hover:bg-muted/50"
+          ? "border-2 border-primary bg-primary/15 shadow-sm ring-1 ring-primary/40"
+          : "hover:bg-muted/50 border border-transparent"
       )}
     >
-      <span className="w-6 shrink-0 text-right text-sm font-semibold text-primary pt-0.5">
+      <span className={cn(
+        "w-7 shrink-0 text-right text-sm font-bold pt-0.5",
+        isSelected ? "text-primary font-black scale-110" : "text-muted-foreground font-semibold"
+      )}>
         {verse.verse}
       </span>
       <div className="flex-1 flex flex-col gap-1.5 min-w-0">
         <div className="flex items-start gap-2">
           {isDual && primaryAbbr && (
-            <span className="shrink-0 rounded bg-primary/15 px-1 py-0.5 text-[0.625rem] font-bold text-primary tracking-wide">
+            <span className={cn(
+              "shrink-0 rounded px-1 py-0.5 text-[0.625rem] font-bold tracking-wide",
+              isSelected ? "bg-primary text-primary-foreground font-extrabold" : "bg-primary/15 text-primary"
+            )}>
               {primaryAbbr}
             </span>
           )}
-          <p className="flex-1 text-sm leading-relaxed text-foreground/90 font-medium">
+          <p className={cn(
+            "flex-1 text-sm leading-relaxed",
+            isSelected ? "text-foreground font-bold" : "text-foreground/90 font-medium"
+          )}>
             {verse.text}
           </p>
         </div>
         {isDual && secondaryVerse?.text && (
           <div className="flex items-start gap-2 pt-1 border-t border-border/40">
             {secondaryAbbr && (
-              <span className="shrink-0 rounded bg-amber-500/15 text-amber-500 dark:text-amber-400 px-1 py-0.5 text-[0.625rem] font-bold tracking-wide">
+              <span className={cn(
+                "shrink-0 rounded px-1 py-0.5 text-[0.625rem] font-bold tracking-wide",
+                isSelected ? "bg-amber-500 text-white font-extrabold" : "bg-amber-500/15 text-amber-500 dark:text-amber-400"
+              )}>
                 {secondaryAbbr}
               </span>
             )}
-            <p className="flex-1 text-sm leading-relaxed text-muted-foreground font-normal">
+            <p className={cn(
+              "flex-1 text-sm leading-relaxed",
+              isSelected ? "text-amber-700 dark:text-amber-300 font-semibold" : "text-muted-foreground font-normal"
+            )}>
               {secondaryVerse.text}
             </p>
           </div>
         )}
       </div>
-      <div className="flex items-center gap-1 shrink-0 pt-0.5">
+      <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
         {isSelected && (
-          <CheckIcon className="size-4 shrink-0 text-ai-direct" />
+          <span className="inline-flex items-center gap-1 rounded bg-primary px-1.5 py-0.5 text-[0.625rem] font-bold uppercase tracking-wider text-primary-foreground shadow-xs">
+            <CheckIcon className="size-3 stroke-[3]" />
+            <span>Live</span>
+          </span>
         )}
         <Tooltip>
           <TooltipTrigger asChild>
@@ -138,6 +157,7 @@ const VerseRow = memo(function VerseRow({
                 useQueueStore.getState().addItem({
                   id: crypto.randomUUID(),
                   verse,
+                  secondaryVerse: secondaryVerse ?? undefined,
                   reference: `${verse.book_name} ${verse.chapter}:${verse.verse}`,
                   confidence: 1,
                   source: "manual",
@@ -226,6 +246,26 @@ export function SearchPanel() {
     }
   }, [books, selectedBook])
 
+  // When selectedVerse changes from any source (queue click, remote, detection),
+  // automatically synchronize Book Search to that book, chapter, and active verse
+  useEffect(() => {
+    if (!selectedVerse) return
+    const bNum = Number(selectedVerse.book_number)
+    const chNum = Number(selectedVerse.chapter)
+    const vNum = Number(selectedVerse.verse)
+    if (!bNum || !chNum || books.length === 0) return
+
+    const targetBook = books.find((b) => Number(b.book_number) === bNum)
+    if (targetBook) {
+      if (!selectedBook || selectedBook.book_number !== bNum || chapter !== chNum) {
+        setSelectedBook(targetBook)
+        setChapter(chNum)
+        setActiveTab("book")
+      }
+      setQuickInput(`${targetBook.name} ${chNum}:${vNum}`)
+    }
+  }, [selectedVerse, books, selectedBook, chapter])
+
   // Load chapter when book + chapter are set
   useEffect(() => {
     if (selectedBookNumber && chapter >= 1) {
@@ -233,23 +273,82 @@ export function SearchPanel() {
     }
   }, [selectedBookNumber, chapter, activeTranslationId, secondaryTranslationId, isDualMode])
 
+  // Selected verse ID: prioritizes selectedVerse from the store so external verse changes (queue, shortcuts) immediately update the highlighted verse
   const effectiveSelectedVerseId = useMemo(() => {
-    if (!selectedVerseId || currentChapter.length === 0) return null
-    if (currentChapter.some((v) => v.id === selectedVerseId)) return selectedVerseId
-    if (!selectedVerse) return null
-    return currentChapter.find((v) => v.verse === selectedVerse.verse)?.id ?? null
+    if (selectedVerse && currentChapter.length > 0) {
+      const match = currentChapter.find(
+        (v) =>
+          Number(v.verse) === Number(selectedVerse.verse) &&
+          Number(v.chapter) === Number(selectedVerse.chapter) &&
+          (Number(v.book_number) === Number(selectedVerse.book_number) || !selectedVerse.book_number)
+      )
+      if (match) return match.id
+    }
+    if (selectedVerseId && currentChapter.some((v) => v.id === selectedVerseId)) {
+      return selectedVerseId
+    }
+    return null
   }, [currentChapter, selectedVerseId, selectedVerse])
 
+  // Currently active verse number for header and display
+  const activeVerseNumber = useMemo(() => {
+    if (
+      selectedVerse &&
+      Number(selectedVerse.book_number) === Number(selectedBookNumber) &&
+      Number(selectedVerse.chapter) === Number(chapter)
+    ) {
+      return Number(selectedVerse.verse)
+    }
+    if (effectiveSelectedVerseId && currentChapter.length > 0) {
+      const match = currentChapter.find((v) => v.id === effectiveSelectedVerseId)
+      return match ? Number(match.verse) : null
+    }
+    return null
+  }, [selectedVerse, selectedBookNumber, chapter, effectiveSelectedVerseId, currentChapter])
+
+  const teluguBookName = useMemo(() => {
+    if (!selectedBookNumber) return ""
+    const b = resolveBook(selectedBookNumber)
+    return b ? b.teluguName : ""
+  }, [selectedBookNumber])
+
+  // Sync selectedVerseId when selectedVerse changes
   useEffect(() => {
-    if (!selectedVerseId || !selectedVerse || currentChapter.length === 0) return
-    const stillExists = currentChapter.some((v) => v.id === selectedVerseId)
-    if (!stillExists) {
-      const match = currentChapter.find((v) => v.verse === selectedVerse.verse)
-      if (match && match.id !== selectedVerse.id) {
-        bibleActions.selectVerse(match)
+    if (selectedVerse && currentChapter.length > 0) {
+      const match = currentChapter.find(
+        (v) =>
+          Number(v.verse) === Number(selectedVerse.verse) &&
+          Number(v.chapter) === Number(selectedVerse.chapter) &&
+          (Number(v.book_number) === Number(selectedVerse.book_number) || !selectedVerse.book_number)
+      )
+      if (match && match.id !== selectedVerseId) {
+        setSelectedVerseId(match.id)
       }
     }
-  }, [currentChapter, selectedVerseId, selectedVerse])
+  }, [selectedVerse, currentChapter, selectedVerseId])
+
+  // Scroll active verse into view
+  useEffect(() => {
+    if (effectiveSelectedVerseId) {
+      const scrollNow = () => {
+        const el = document.getElementById(`verse-${effectiveSelectedVerseId}`)
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" })
+          return true
+        }
+        return false
+      }
+
+      if (!scrollNow()) {
+        const t1 = setTimeout(scrollNow, 60)
+        const t2 = setTimeout(scrollNow, 200)
+        return () => {
+          clearTimeout(t1)
+          clearTimeout(t2)
+        }
+      }
+    }
+  }, [effectiveSelectedVerseId, currentChapter])
 
   const applyNavigationSelection = useCallback(
     (book: Book, navChapter: number) => {
@@ -272,27 +371,46 @@ export function SearchPanel() {
       }
 
       const { bookNumber, chapter: navChapter, verse: navVerse } = pendingNavigation
-      const pendingKey = `${bookNumber}:${navChapter}:${navVerse}`
+      const bNum = Number(bookNumber)
+      const chNum = Number(navChapter)
+      const vNum = Number(navVerse)
+      const pendingKey = `${bNum}:${chNum}:${vNum}`
       if (pendingKey === lastHandledKey) return
 
-      const book = state.books.find((b) => b.book_number === bookNumber)
+      let book = state.books.find((b) => Number(b.book_number) === bNum)
+      if (!book) {
+        const std = resolveBook(bNum)
+        if (std) {
+          book = {
+            id: std.num,
+            translation_id: state.activeTranslationId,
+            book_number: std.num,
+            name: std.name,
+            abbreviation: std.abbr,
+            testament: std.testament,
+          }
+        }
+      }
       if (!book) return
 
       lastHandledKey = pendingKey
-      applyNavigationSelection(book, navChapter)
+      applyNavigationSelection(book, chNum)
+      setQuickInput(`${book.name} ${chNum}:${vNum}`)
 
-      bibleActions.loadChapter(bookNumber, navChapter).then((verses) => {
-        const target = verses.find((v) => v.verse === navVerse)
+      bibleActions.loadChapter(bNum, chNum).then((verses) => {
+        const target = verses.find((v) => Number(v.verse) === vNum)
         if (target) {
           setSelectedVerseId(target.id)
-          bibleActions.selectVerse(target)
-          document
-            .getElementById(`verse-${target.id}`)
-            ?.scrollIntoView({ behavior: "smooth", block: "center" })
+          const sec = useBibleStore.getState().secondaryChapter.find((v) => Number(v.verse) === vNum)
+          const enhanced = sec ? { ...target, secondaryVerse: sec } : target
+          bibleActions.selectVerse(enhanced)
+          setTimeout(() => {
+            document
+              .getElementById(`verse-${target.id}`)
+              ?.scrollIntoView({ behavior: "smooth", block: "center" })
+          }, 60)
         }
-        // Focus panel and sync input ONLY if this was an explicit user Enter/click navigation
         if (focusAfterNavRef.current === true) {
-          setQuickInput(`${book.name} ${navChapter}:${navVerse}`)
           panelRef.current?.focus()
         }
         focusAfterNavRef.current = undefined
@@ -767,15 +885,42 @@ export function SearchPanel() {
         <>
           <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2 min-h-9">
             {selectedBook ? (
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-foreground">
-                  {selectedBook.name} {chapter}
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5 flex-wrap">
+                  <span className="text-primary font-extrabold">
+                    {selectedBook.name} {chapter}{activeVerseNumber ? `:${activeVerseNumber}` : ""}
+                  </span>
+                  {isDualMode && teluguBookName && (
+                    <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+                      • {teluguBookName} {chapter}{activeVerseNumber ? `:${activeVerseNumber}` : ""}
+                    </span>
+                  )}
                 </h3>
                 {isDualMode && (
                   <span className="rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-bold px-2 py-0.5">
                     {primaryAbbr} + {secondaryAbbr}
                   </span>
                 )}
+                {selectedVerse &&
+                  selectedVerse.book_number > 0 &&
+                  (selectedVerse.book_number !== selectedBookNumber || selectedVerse.chapter !== chapter) && (
+                    <button
+                      onClick={() =>
+                        bibleActions.navigateToVerse(
+                          selectedVerse.book_number,
+                          selectedVerse.chapter,
+                          selectedVerse.verse
+                        )
+                      }
+                      className="flex items-center gap-1 rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/20 transition-colors"
+                      title="Show the chapter currently on screen"
+                    >
+                      <TvIcon className="size-2.5" />
+                      <span>
+                        On screen: {selectedVerse.book_name} {selectedVerse.chapter}:{selectedVerse.verse}
+                      </span>
+                    </button>
+                  )}
               </div>
             ) : null}
             {selectedBook ? (
@@ -858,6 +1003,19 @@ export function SearchPanel() {
                 <div
                   key={`${result.book_number}-${result.chapter}-${result.verse}`}
                   onClick={() => {
+                    const sec = result.secondary_text
+                      ? {
+                          id: 0,
+                          translation_id: secondaryTranslationId ?? 6,
+                          book_number: result.book_number,
+                          book_name: result.secondary_book_name || result.book_name,
+                          book_abbreviation: "",
+                          chapter: result.chapter,
+                          verse: result.verse,
+                          text: result.secondary_text,
+                        }
+                      : null
+
                     bibleActions.selectVerse({
                       id: 0,
                       translation_id: activeTranslationId,
@@ -867,7 +1025,15 @@ export function SearchPanel() {
                       chapter: result.chapter,
                       verse: result.verse,
                       text: result.verse_text,
-                    })
+                      ...(sec ? { secondaryVerse: sec } : {}),
+                    } as any)
+
+                    // Also display this chapter in the Book Search panel
+                    bibleActions.navigateToVerse(
+                      result.book_number,
+                      result.chapter,
+                      result.verse
+                    )
                   }}
                   className="group flex flex-col cursor-pointer gap-1.5 rounded-lg p-3 transition-colors hover:bg-muted/50 border border-transparent hover:border-border/50 relative"
                 >
@@ -912,6 +1078,19 @@ export function SearchPanel() {
                         className="absolute right-2 top-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity bg-primary text-primary-foreground hover:bg-primary/80"
                         onClick={(e) => {
                           e.stopPropagation()
+                          const sec = result.secondary_text
+                            ? {
+                                id: 0,
+                                translation_id: secondaryTranslationId ?? 6,
+                                book_number: result.book_number,
+                                book_name: result.secondary_book_name || result.book_name,
+                                book_abbreviation: "",
+                                chapter: result.chapter,
+                                verse: result.verse,
+                                text: result.secondary_text,
+                              }
+                            : undefined
+
                           useQueueStore.getState().addItem({
                             id: crypto.randomUUID(),
                             verse: {
@@ -924,6 +1103,7 @@ export function SearchPanel() {
                               verse: result.verse,
                               text: result.verse_text,
                             },
+                            secondaryVerse: sec,
                             reference: `${result.book_name} ${result.chapter}:${result.verse}`,
                             confidence: result.similarity,
                             source: "manual",

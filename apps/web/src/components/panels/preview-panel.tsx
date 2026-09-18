@@ -32,9 +32,17 @@ export function PreviewPanel() {
   const translation = translations.find((t) => t.id === activeTranslationId)?.abbreviation ?? "NIV"
   const secondaryTranslation = translations.find((t) => t.id === secondaryTranslationId)?.abbreviation ?? "TEL"
 
-  const secondaryVerse = isDualMode && selectedVerse && secondaryChapter.length > 0
-    ? secondaryChapter.find((v) => v.verse === selectedVerse.verse) ?? null
-    : null
+  const secondaryVerseFromChapter =
+    isDualMode &&
+    selectedVerse &&
+    secondaryChapter.length > 0 &&
+    Number(secondaryChapter[0]?.book_number) === Number(selectedVerse.book_number) &&
+    Number(secondaryChapter[0]?.chapter) === Number(selectedVerse.chapter)
+      ? secondaryChapter.find((v) => Number(v.verse) === Number(selectedVerse.verse)) ?? null
+      : null
+
+  const secondaryVerse =
+    secondaryVerseFromChapter ?? ((selectedVerse as any)?.secondaryVerse as Verse | null) ?? null
 
   const verseData = selectedVerse
     ? toVerseRenderData(
