@@ -19,6 +19,7 @@ import {
   CheckIcon,
   PlusIcon,
   Languages,
+  TvIcon,
 } from "lucide-react"
 import {
   Tooltip,
