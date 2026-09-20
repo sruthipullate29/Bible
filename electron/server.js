@@ -378,11 +378,43 @@ function startServer(port = 4001, options = {}) {
       }
     })
 
-    wss.on('connection', (ws) => {
+    let cachedMainUpdate = null
+    let cachedAltUpdate = null
+
+    wss.on('connection', (ws, req) => {
       overlayClients.add(ws)
+
+      // Send initial state immediately upon connection if available
+      try {
+        const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
+        const output = parsedUrl.searchParams.get('output') || 'main'
+        const cached = output === 'alt' ? (cachedAltUpdate || cachedMainUpdate) : cachedMainUpdate
+        if (cached && ws.readyState === WebSocket.OPEN) {
+          ws.send(cached)
+        }
+      } catch {}
+
       ws.on('message', (message) => {
         try {
           const str = message.toString()
+          let parsed = null
+          try {
+            parsed = JSON.parse(str)
+          } catch {}
+
+          if (parsed?.type === 'verse:update') {
+            if (parsed.label === 'broadcast-alt') {
+              cachedAltUpdate = str
+            } else {
+              cachedMainUpdate = str
+            }
+          } else if (parsed?.type === 'overlay:ready') {
+            const cached = parsed.output === 'alt' ? (cachedAltUpdate || cachedMainUpdate) : cachedMainUpdate
+            if (cached && ws.readyState === WebSocket.OPEN) {
+              ws.send(cached)
+            }
+          }
+
           for (const client of overlayClients) {
             if (client !== ws && client.readyState === WebSocket.OPEN) {
               client.send(str)

@@ -258,9 +258,12 @@ export function BroadcastSettings({
       alwaysOnTop: mainAlwaysOnTop,
     })
     setIsMainWiredActive(true)
-    setIsAltWiredActive(true)
+    const extCount = displays.filter((d) => !d.isPrimary).length
+    if (extCount >= 2 || altDisplayId) {
+      setIsAltWiredActive(true)
+      if (altDisplayId) setActiveAltDisplayId(Number(altDisplayId))
+    }
     if (mainDisplayId) setActiveMainDisplayId(Number(mainDisplayId))
-    if (altDisplayId) setActiveAltDisplayId(Number(altDisplayId))
   }
 
   const handleStopBothWired = async () => {

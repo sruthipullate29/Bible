@@ -30,4 +30,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('wired-display:status-change', subscription)
     return () => ipcRenderer.removeListener('wired-display:status-change', subscription)
   },
+
+  // Local Database and File Queue I/O
+  saveQueueToDb: (items) =>
+    ipcRenderer.invoke('queue:save-local-db', items),
+
+  loadQueueFromDb: () =>
+    ipcRenderer.invoke('queue:load-local-db'),
+
+  exportQueueFile: (args) =>
+    ipcRenderer.invoke('queue:export-file', args),
+
+  importQueueFile: () =>
+    ipcRenderer.invoke('queue:import-file'),
 })

@@ -73,10 +73,10 @@ export function LiveOutputPanel() {
             onClick={() => toggleWiredDisplay()}
             title={
               isMainWiredActive && isAltWiredActive
-                ? "2 HDMI Screens Active (HDMI 1 Main + HDMI 2 Alt). Click to disconnect both."
+                ? "2 HDMI Screens Active (HDMI 1 Main + HDMI 2 Alt). Click to disconnect."
                 : isWiredActive
-                  ? "1 HDMI Screen Active. Click to connect both HDMI screens."
-                  : "Connect 2 HDMI Screens (HDMI 1 Projector + HDMI 2 Alternative)"
+                  ? "HDMI Screen Active. Click to disconnect."
+                  : "Connect HDMI Screen (Projector / TV)"
             }
             className={cn(
               "flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[0.5625rem] font-medium uppercase tracking-wider transition-all border",
@@ -90,8 +90,8 @@ export function LiveOutputPanel() {
               {isMainWiredActive && isAltWiredActive
                 ? "2 Screens Live"
                 : isWiredActive
-                  ? "1 Screen Live"
-                  : "2 HDMI Screens"}
+                  ? "HDMI Live"
+                  : "HDMI Screen"}
             </span>
           </button>
           <button

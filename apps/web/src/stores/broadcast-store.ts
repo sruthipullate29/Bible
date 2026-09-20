@@ -401,7 +401,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
             }))
           }
           get().syncBroadcastOutput()
-          setTimeout(() => get().syncBroadcastOutput(), 800)
+          setTimeout(() => get().syncBroadcastOutput(), 400)
+          setTimeout(() => get().syncBroadcastOutput(), 1200)
         }
       } catch (err) {
         console.error(`[broadcast] Failed to open wired display for ${output}:`, err)
@@ -452,8 +453,20 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const s = get()
     // Open Main screen first
     await s.openWiredDisplay(s.mainWiredDisplayId ?? undefined, "main", options)
-    // Open Alt screen second
-    await s.openWiredDisplay(s.altWiredDisplayId ?? undefined, "alt", options)
+
+    // Check how many external displays are connected
+    let externalCount = 0
+    if (typeof window !== "undefined" && window.electronAPI?.getDisplays) {
+      try {
+        const list = await window.electronAPI.getDisplays()
+        externalCount = list.filter((d) => !d.isPrimary).length
+      } catch {}
+    }
+
+    // Only open Alt screen if we have at least 2 external displays or an explicit altDisplayId
+    if (externalCount >= 2 || s.altWiredDisplayId) {
+      await s.openWiredDisplay(s.altWiredDisplayId ?? undefined, "alt", options)
+    }
   },
   closeWiredDisplay: async (output) => {
     if (typeof window !== "undefined" && window.electronAPI?.closeWiredDisplay) {
@@ -526,11 +539,25 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       return
     }
 
-    // Default without argument: toggle both screens
-    if (s.isMainWiredActive && s.isAltWiredActive) {
+    // Default without argument: if ANY screen is active, disconnect
+    if (s.isWiredActive || s.isMainWiredActive || s.isAltWiredActive) {
       await s.closeWiredDisplay()
-    } else {
+      return
+    }
+
+    // Otherwise connect intelligently based on number of external monitors
+    let externalCount = 0
+    if (typeof window !== "undefined" && window.electronAPI?.getDisplays) {
+      try {
+        const list = await window.electronAPI.getDisplays()
+        externalCount = list.filter((d) => !d.isPrimary).length
+      } catch {}
+    }
+
+    if (externalCount >= 2) {
       await s.openBothWiredDisplays()
+    } else {
+      await s.openWiredDisplay(s.mainWiredDisplayId ?? undefined, "main")
     }
   },
 

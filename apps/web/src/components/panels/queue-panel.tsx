@@ -1,3 +1,4 @@
+import { useRef } from "react"
 import { PanelHeader } from "@/components/ui/panel-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -6,7 +7,19 @@ import {
   PlayIcon,
   XIcon,
   GripVerticalIcon,
+  DownloadIcon,
+  UploadIcon,
+  DatabaseIcon,
+  FileTextIcon,
 } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { toast } from "sonner"
+import { exportQueueAsJson, exportQueueAsText, parseQueueFile } from "@/lib/queue-io"
 import { useQueueStore, useBroadcastStore, useBibleStore } from "@/stores"
 import { toVerseRenderData } from "@/hooks/use-broadcast"
 import { bibleActions } from "@/hooks/use-bible"
@@ -196,30 +209,169 @@ function QueueItemRow({
 export function QueuePanel() {
   const items = useQueueStore((s) => s.items)
   const activeIndex = useQueueStore((s) => s.activeIndex)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleExportJson = async () => {
+    if (items.length === 0) {
+      toast.info("Queue is empty. Add verses to save.")
+      return
+    }
+    try {
+      const res = await exportQueueAsJson(items)
+      if (res.success) {
+        toast.success(`Saved ${items.length} verses to local database file (${res.filename})`)
+      }
+    } catch (err) {
+      toast.error("Failed to save queue file", {
+        description: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
+
+  const handleExportText = async () => {
+    if (items.length === 0) {
+      toast.info("Queue is empty. Add verses to export.")
+      return
+    }
+    try {
+      const res = await exportQueueAsText(items)
+      if (res.success) {
+        toast.success(`Exported ${items.length} verses as text set list`)
+      }
+    } catch (err) {
+      toast.error("Failed to export set list", {
+        description: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    try {
+      const text = await file.text()
+      const imported = parseQueueFile(text)
+      useQueueStore.getState().appendItems(imported)
+      toast.success(`Imported ${imported.length} verses into queue and local database`)
+    } catch (err) {
+      toast.error("Failed to import queue file", {
+        description: err instanceof Error ? err.message : String(err),
+      })
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
+    }
+  }
 
   return (
     <div
       data-slot="queue-panel"
       className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card"
     >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json"
+        className="hidden"
+        onChange={handleImportFile}
+      />
+
       <PanelHeader title="Queue">
-        <div className="flex items-center gap-2">
-          <Badge variant="outline">{items.length}</Badge>
-          <button
-            onClick={() => useQueueStore.getState().clearQueue()}
-            className="text-[0.625rem] text-muted-foreground transition-colors hover:text-foreground"
+        <div className="flex items-center gap-1.5">
+          <Badge variant="outline" className="h-5 px-1.5 text-xs font-semibold">
+            {items.length}
+          </Badge>
+
+          {/* Local Database Saved Indicator */}
+          <div
+            className="flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[0.625rem] font-medium text-emerald-600 dark:text-emerald-400"
+            title="Continuous auto-save: all verses in queue are automatically saved to your system's local database"
           >
-            Clear all
-          </button>
+            <DatabaseIcon className="size-2.5" />
+            <span className="hidden sm:inline">Local DB</span>
+          </div>
+
+          {/* Download / Save Queue to File */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                title="Save / Download Queue File"
+              >
+                <DownloadIcon className="size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={handleExportJson} className="gap-2">
+                <DatabaseIcon className="size-3.5 text-emerald-500" />
+                <div className="flex flex-col">
+                  <span className="font-medium">Download Database File</span>
+                  <span className="text-[0.625rem] text-muted-foreground">
+                    Save as .json to backup or transfer
+                  </span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportText} className="gap-2">
+                <FileTextIcon className="size-3.5 text-blue-500" />
+                <div className="flex flex-col">
+                  <span className="font-medium">Export Set List (.txt)</span>
+                  <span className="text-[0.625rem] text-muted-foreground">
+                    Readable text with Telugu & English
+                  </span>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Import / Load Saved Queue File */}
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="h-6 w-6 text-muted-foreground hover:text-foreground"
+            onClick={() => fileInputRef.current?.click()}
+            title="Import / Open Saved Queue File (.json)"
+          >
+            <UploadIcon className="size-3.5" />
+          </Button>
+
+          {/* Clear All */}
+          {items.length > 0 && (
+            <button
+              onClick={() => useQueueStore.getState().clearQueue()}
+              className="ml-1 text-[0.625rem] text-muted-foreground transition-colors hover:text-foreground"
+              title="Clear all verses from queue"
+            >
+              Clear all
+            </button>
+          )}
         </div>
       </PanelHeader>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="flex flex-col gap-0.5 p-1.5">
           {items.length === 0 && (
-            <p className="p-4 text-center text-xs text-muted-foreground">
-              Verses will appear here when detected or queued
-            </p>
+            <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+              <DatabaseIcon className="mb-2 size-6 text-muted-foreground/30" />
+              <p className="text-xs font-medium text-muted-foreground">
+                Queue is empty
+              </p>
+              <p className="mt-1 text-[0.7rem] text-muted-foreground/70">
+                Verses added here are saved to your local system database
+              </p>
+              <Button
+                variant="outline"
+                size="xs"
+                className="mt-3 gap-1.5 text-[0.7rem]"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <UploadIcon className="size-3" />
+                Load Saved File
+              </Button>
+            </div>
           )}
           {items.map((item, idx) => (
             <QueueItemRow

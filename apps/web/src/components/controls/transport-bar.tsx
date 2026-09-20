@@ -74,10 +74,10 @@ export function TransportBar() {
           )}
           title={
             isMainWiredActive && isAltWiredActive
-              ? "2 HDMI Screens Active (HDMI 1 Main + HDMI 2 Alt). Click to disconnect both."
+              ? "2 HDMI Screens Active (HDMI 1 Main + HDMI 2 Alt). Click to disconnect."
               : isWiredActive
-                ? "1 HDMI Screen Active. Click to connect both HDMI screens."
-                : "Connect 2 HDMI Screens (HDMI 1 Projector + HDMI 2 Alternative)"
+                ? "HDMI Screen Active. Click to disconnect."
+                : "Connect HDMI Screen (Projector / TV)"
           }
           onClick={() => toggleWiredDisplay()}
         >
@@ -86,8 +86,8 @@ export function TransportBar() {
             {isMainWiredActive && isAltWiredActive
               ? "2 Screens Live"
               : isWiredActive
-                ? "1 Screen Live"
-                : "2 HDMI Screens"}
+                ? "HDMI Live"
+                : "HDMI Screen"}
           </span>
         </Button>
         <Button

@@ -34,7 +34,7 @@ import type { Book, Verse } from "@/types"
 import { Input } from "@/components/ui/input"
 import { searchContextWithFuse, prefetchFuseIndex } from "@/lib/context-search"
 import { api } from "@/services"
-import { resolveBook } from "@/lib/bible-books"
+import { resolveBook, getMaxChapters } from "@/lib/bible-books"
 
 type SearchTab = "book" | "context"
 
@@ -194,6 +194,7 @@ export function SearchPanel() {
   const panelRef = useRef<HTMLDivElement>(null)
   const chapterLoadRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const focusAfterNavRef = useRef<boolean | undefined>(undefined)
+  const lastSyncedVerseIdRef = useRef<number | null>(null)
 
   // Subscribe to individual slices to avoid re-rendering the entire panel on unrelated changes
   const translations = useBibleStore((s) => s.translations)
@@ -221,6 +222,7 @@ export function SearchPanel() {
   )
 
   const selectedBookNumber = selectedBook?.book_number
+  const maxChapters = useMemo(() => getMaxChapters(selectedBookNumber), [selectedBookNumber])
 
   // Load initial data
   useEffect(() => {
@@ -251,6 +253,9 @@ export function SearchPanel() {
   // automatically synchronize Book Search to that book, chapter, and active verse
   useEffect(() => {
     if (!selectedVerse) return
+    if (lastSyncedVerseIdRef.current === selectedVerse.id) return
+    lastSyncedVerseIdRef.current = selectedVerse.id
+
     const bNum = Number(selectedVerse.book_number)
     const chNum = Number(selectedVerse.chapter)
     const vNum = Number(selectedVerse.verse)
@@ -258,14 +263,15 @@ export function SearchPanel() {
 
     const targetBook = books.find((b) => Number(b.book_number) === bNum)
     if (targetBook) {
-      if (!selectedBook || selectedBook.book_number !== bNum || chapter !== chNum) {
-        setSelectedBook(targetBook)
-        setChapter(chNum)
-        setActiveTab("book")
+      setSelectedBook(targetBook)
+      setChapter(chNum)
+      setSelectedVerseId(selectedVerse.id)
+      setActiveTab("book")
+      if (document.activeElement !== quickInputRef.current) {
+        setQuickInput(`${targetBook.name} ${chNum}:${vNum}`)
       }
-      setQuickInput(`${targetBook.name} ${chNum}:${vNum}`)
     }
-  }, [selectedVerse, books, selectedBook, chapter])
+  }, [selectedVerse, books])
 
   // Load chapter when book + chapter are set
   useEffect(() => {
@@ -366,17 +372,17 @@ export function SearchPanel() {
 
     const unsubscribe = useBibleStore.subscribe((state) => {
       const pendingNavigation = state.pendingNavigation
-      if (!pendingNavigation) {
-        lastHandledKey = null
-        return
-      }
+      if (!pendingNavigation) return
 
       const { bookNumber, chapter: navChapter, verse: navVerse } = pendingNavigation
       const bNum = Number(bookNumber)
       const chNum = Number(navChapter)
       const vNum = Number(navVerse)
       const pendingKey = `${bNum}:${chNum}:${vNum}`
-      if (pendingKey === lastHandledKey) return
+      if (pendingKey === lastHandledKey) {
+        useBibleStore.getState().setPendingNavigation(null)
+        return
+      }
 
       let book = state.books.find((b) => Number(b.book_number) === bNum)
       if (!book) {
@@ -392,11 +398,16 @@ export function SearchPanel() {
           }
         }
       }
-      if (!book) return
+      if (!book) {
+        useBibleStore.getState().setPendingNavigation(null)
+        return
+      }
 
       lastHandledKey = pendingKey
       applyNavigationSelection(book, chNum)
-      setQuickInput(`${book.name} ${chNum}:${vNum}`)
+      if (document.activeElement !== quickInputRef.current) {
+        setQuickInput(`${book.name} ${chNum}:${vNum}`)
+      }
 
       bibleActions.loadChapter(bNum, chNum).then((verses) => {
         const target = verses.find((v) => Number(v.verse) === vNum)
@@ -404,6 +415,7 @@ export function SearchPanel() {
           setSelectedVerseId(target.id)
           const sec = useBibleStore.getState().secondaryChapter.find((v) => Number(v.verse) === vNum)
           const enhanced = sec ? { ...target, secondaryVerse: sec } : target
+          lastSyncedVerseIdRef.current = target.id
           bibleActions.selectVerse(enhanced)
           setTimeout(() => {
             document
@@ -539,43 +551,39 @@ export function SearchPanel() {
     contextQuery$.next(query)
   }, [contextQuery$])
 
-  // EasyWorship-style autocomplete logic
+  // EasyWorship-style autocomplete logic for quick verse dropdown
   useEffect(() => {
-    const result = getAutocompleteSuggestion(quickInput, books)
-
-    if (result.matchedBook && result.chapter && result.verse) {
-      // This is a mid-typing preview — don't focus after navigation
-      focusAfterNavRef.current = false
-      useBibleStore.getState().setPendingNavigation({
-        bookNumber: result.matchedBook.book_number,
-        chapter: result.chapter,
-        verse: result.verse
-      })
+    if (!quickInput.trim()) {
+      setShowQuickVerses(false)
+      return
     }
 
-    // Debounce chapter loading to avoid firing on every keystroke
+    const result = getAutocompleteSuggestion(quickInput, books)
+
+    // Debounce chapter preview loading for the dropdown list
     if (chapterLoadRef.current) clearTimeout(chapterLoadRef.current)
 
     if ((result.stage === "chapter" || result.stage === "verse") && result.matchedBook && result.chapter) {
       const bookNumber = result.matchedBook.book_number
       const ch = result.chapter
       chapterLoadRef.current = setTimeout(() => {
+        const tid = useBibleStore.getState().activeTranslationId
         const secId = useBibleStore.getState().secondaryTranslationId
         const isDual = useBibleStore.getState().isDualMode
 
         Promise.all([
-          bibleActions.loadChapter(bookNumber, ch),
+          api.getChapter(tid, bookNumber, ch).catch(() => [] as Verse[]),
           isDual && secId ? api.getChapter(secId, bookNumber, ch).catch(() => [] as Verse[]) : Promise.resolve([] as Verse[])
         ]).then(([verses, secVerses]) => {
           setQuickVersesList(verses)
           setQuickSecondaryVersesList(secVerses)
-          setShowQuickVerses(true)
+          setShowQuickVerses(verses.length > 0)
         }).catch(console.error)
-      }, 300)
+      }, 250)
     } else {
-      queueMicrotask(() => setShowQuickVerses(false))
+      setShowQuickVerses(false)
     }
-  }, [quickInput, books, activeTranslationId, secondaryTranslationId, isDualMode])
+  }, [quickInput, books])
 
   const handleQuickKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if ((e.key === "Tab" || e.key === "ArrowRight") && quickSuggestion && quickSuggestion !== quickInput) {
@@ -682,6 +690,7 @@ export function SearchPanel() {
                   if (b) {
                     applyNavigationSelection(b, 1)
                     setSelectedVerseId(null)
+                    setQuickInput(`${b.name} 1:1`)
                     bibleActions.loadChapter(b.book_number, 1).catch(console.error)
                   }
                 }}
@@ -704,6 +713,33 @@ export function SearchPanel() {
                   {books.filter((b) => b.book_number >= 40).map((b) => (
                     <SelectItem key={b.id} value={String(b.book_number)} className="text-xs">
                       {b.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {/* Direct Chapter Selector Dropdown */}
+            {selectedBook && (
+              <Select
+                value={String(chapter)}
+                onValueChange={(val) => {
+                  const ch = Number(val)
+                  if (ch >= 1) {
+                    setChapter(ch)
+                    setSelectedVerseId(null)
+                    setQuickInput(`${selectedBook.name} ${ch}:1`)
+                    bibleActions.loadChapter(selectedBook.book_number, ch).catch(console.error)
+                  }
+                }}
+              >
+                <SelectTrigger size="sm" className="h-7 w-[72px] shrink-0 text-xs font-semibold bg-background" title="Select Chapter">
+                  <SelectValue placeholder="Ch" />
+                </SelectTrigger>
+                <SelectContent className="max-h-64">
+                  {Array.from({ length: maxChapters }, (_, i) => i + 1).map((chNum) => (
+                    <SelectItem key={chNum} value={String(chNum)} className="text-xs">
+                      Ch {chNum}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -925,29 +961,41 @@ export function SearchPanel() {
               </div>
             ) : null}
             {selectedBook ? (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
                 <Button
                   variant="ghost"
                   size="icon-xs"
                   onClick={() => {
                     if (chapter > 1) {
-                      setChapter((c) => c - 1)
-                      setChapterInput("")
+                      const newCh = chapter - 1
+                      setChapter(newCh)
                       setSelectedVerseId(null)
+                      setQuickInput(`${selectedBook.name} ${newCh}:1`)
+                      bibleActions.loadChapter(selectedBook.book_number, newCh).catch(console.error)
                     }
                   }}
                   disabled={chapter <= 1}
+                  title="Previous chapter"
                 >
                   <ArrowLeftIcon className="size-3" />
                 </Button>
+                <span className="text-xs font-semibold text-muted-foreground tabular-nums">
+                  Ch {chapter} of {maxChapters}
+                </span>
                 <Button
                   variant="ghost"
                   size="icon-xs"
                   onClick={() => {
-                    setChapter((c) => c + 1)
-                    setChapterInput("")
-                    setSelectedVerseId(null)
+                    if (chapter < maxChapters) {
+                      const newCh = chapter + 1
+                      setChapter(newCh)
+                      setSelectedVerseId(null)
+                      setQuickInput(`${selectedBook.name} ${newCh}:1`)
+                      bibleActions.loadChapter(selectedBook.book_number, newCh).catch(console.error)
+                    }
                   }}
+                  disabled={chapter >= maxChapters}
+                  title="Next chapter"
                 >
                   <ArrowRightIcon className="size-3" />
                 </Button>

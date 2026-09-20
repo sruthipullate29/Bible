@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, shell, ipcMain, Tray, nativeImage, safeStorage, screen } = require('electron')
+const { app, BrowserWindow, Menu, shell, ipcMain, Tray, nativeImage, safeStorage, screen, dialog } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
@@ -87,6 +87,13 @@ function openWiredDisplay(displayId, options = {}) {
     const nonPrimary = displays.filter((d) => d.id !== primaryId)
     const output = (options.output === 'alt') ? 'alt' : 'main'
 
+    // If requesting alt screen but there is only 1 external display and no specific displayId was set:
+    // Skip alt output so it doesn't open on top of the main screen and cover it with black
+    if (output === 'alt' && !displayId && nonPrimary.length < 2) {
+      console.warn('[electron] Alt output requested, but only 1 external display is connected. Skipping Alt to protect Main screen.')
+      return { success: false, error: 'Only 1 external display available; skipped second screen.' }
+    }
+
     let target = null
     if (displayId) {
       target = displays.find((d) => String(d.id) === String(displayId))
@@ -94,15 +101,22 @@ function openWiredDisplay(displayId, options = {}) {
     if (!target) {
       // Intelligently assign default display for 2 HDMI outputs:
       // If output is main: default to 1st external display (HDMI 1), else primary
-      // If output is alt: default to 2nd external display (HDMI 2), else 1st external, else primary
+      // If output is alt: default to 2nd external display (HDMI 2) if present
       if (output === 'alt') {
-        target = nonPrimary[1] || nonPrimary[0] || primary
+        target = nonPrimary[1] || (nonPrimary.length > 1 ? nonPrimary[0] : null)
       } else {
         target = nonPrimary[0] || primary
       }
     }
 
-    const isFullscreen = options.fullscreen !== false
+    if (!target) {
+      target = primary
+    }
+
+    const isPrimaryScreen = target.id === primaryId
+    // If opening on primary screen (no external screen available), do not force fullscreen alwaysOnTop over the control UI
+    const isFullscreen = isPrimaryScreen ? false : (options.fullscreen !== false)
+    const isAlwaysOnTop = isPrimaryScreen ? false : (options.alwaysOnTop ?? true)
     const session = options.session || 'default'
 
     // Close existing window for this specific output channel if already running
@@ -114,16 +128,21 @@ function openWiredDisplay(displayId, options = {}) {
     const { bounds } = target
     const title = output === 'alt'
       ? 'Sharon AG – HDMI 2 Alternative / Stage Output'
-      : 'Sharon AG – HDMI 1 Main Presentation Output'
+      : (isPrimaryScreen ? 'Sharon AG – HDMI Preview (No external display connected)' : 'Sharon AG – HDMI 1 Main Presentation Output')
+
+    const winWidth = isPrimaryScreen ? Math.min(1280, Math.floor(bounds.width * 0.85)) : bounds.width
+    const winHeight = isPrimaryScreen ? Math.min(720, Math.floor(bounds.height * 0.85)) : bounds.height
+    const winX = isPrimaryScreen ? bounds.x + Math.floor((bounds.width - winWidth) / 2) : bounds.x
+    const winY = isPrimaryScreen ? bounds.y + Math.floor((bounds.height - winHeight) / 2) : bounds.y
 
     const win = new BrowserWindow({
-      x: bounds.x,
-      y: bounds.y,
-      width: bounds.width,
-      height: bounds.height,
+      x: winX,
+      y: winY,
+      width: winWidth,
+      height: winHeight,
       fullscreen: false,
       frame: !isFullscreen,
-      alwaysOnTop: options.alwaysOnTop ?? true,
+      alwaysOnTop: isAlwaysOnTop,
       backgroundColor: '#000000',
       title,
       webPreferences: {
@@ -132,8 +151,8 @@ function openWiredDisplay(displayId, options = {}) {
       },
     })
 
-    win.setBounds(bounds)
     if (isFullscreen) {
+      win.setBounds(bounds)
       win.setFullScreen(true)
     }
 
@@ -300,6 +319,91 @@ ipcMain.handle('deepgram:get-key', () => {
 
 ipcMain.handle('deepgram:set-key', (_event, key) => {
   return setStoredDeepgramKey(key)
+})
+
+// ─── Queue Local Database & File I/O ───────────────────────────────────────────
+function getQueueDbPath() {
+  const userData = app.getPath('userData')
+  if (!fs.existsSync(userData)) {
+    fs.mkdirSync(userData, { recursive: true })
+  }
+  return path.join(userData, 'queue_database.json')
+}
+
+ipcMain.handle('queue:save-local-db', (_event, items) => {
+  try {
+    const filePath = getQueueDbPath()
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify({ version: '1.0', updatedAt: new Date().toISOString(), items: items || [] }, null, 2),
+      'utf8'
+    )
+    return { success: true, path: filePath }
+  } catch (err) {
+    console.error('[electron] Failed to save queue to local DB:', err)
+    return { success: false, error: err.message }
+  }
+})
+
+ipcMain.handle('queue:load-local-db', () => {
+  try {
+    const filePath = getQueueDbPath()
+    if (!fs.existsSync(filePath)) {
+      return { success: true, items: [] }
+    }
+    const raw = fs.readFileSync(filePath, 'utf8')
+    const data = JSON.parse(raw)
+    return {
+      success: true,
+      items: Array.isArray(data) ? data : (data.items || []),
+      updatedAt: data.updatedAt,
+      path: filePath,
+    }
+  } catch (err) {
+    console.error('[electron] Failed to load queue from local DB:', err)
+    return { success: false, error: err.message, items: [] }
+  }
+})
+
+ipcMain.handle('queue:export-file', async (_event, { filename, content, filters }) => {
+  try {
+    const defaultName = filename || `sharon_ag_queue_${new Date().toISOString().slice(0, 10)}.json`
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: 'Download / Save Queue File',
+      defaultPath: path.join(app.getPath('downloads'), defaultName),
+      filters: filters || [
+        { name: 'JSON Database (*.json)', extensions: ['json'] },
+        { name: 'Text Set List (*.txt)', extensions: ['txt'] },
+        { name: 'All Files (*.*)', extensions: ['*'] },
+      ],
+    })
+    if (canceled || !filePath) return { canceled: true }
+    fs.writeFileSync(filePath, content, 'utf8')
+    return { success: true, filePath }
+  } catch (err) {
+    console.error('[electron] Failed to export queue file:', err)
+    return { success: false, error: err.message }
+  }
+})
+
+ipcMain.handle('queue:import-file', async () => {
+  try {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: 'Open / Import Saved Queue File',
+      defaultPath: app.getPath('downloads'),
+      filters: [
+        { name: 'JSON Queue File (*.json)', extensions: ['json'] },
+        { name: 'All Files (*.*)', extensions: ['*'] },
+      ],
+      properties: ['openFile'],
+    })
+    if (canceled || !filePaths || filePaths.length === 0) return { canceled: true }
+    const content = fs.readFileSync(filePaths[0], 'utf8')
+    return { success: true, content, filePath: filePaths[0] }
+  } catch (err) {
+    console.error('[electron] Failed to import queue file:', err)
+    return { success: false, error: err.message }
+  }
 })
 
 let mainWindow = null

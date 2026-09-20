@@ -52,6 +52,16 @@ export interface ElectronAPI {
   onWiredDisplayStatusChange: (
     callback: (status: WiredDisplayStatus) => void
   ) => () => void
+
+  // Local Database and File Queue I/O
+  saveQueueToDb?: (items: any[]) => Promise<{ success: boolean; path?: string; error?: string }>
+  loadQueueFromDb?: () => Promise<{ success: boolean; items: any[]; updatedAt?: string; path?: string; error?: string }>
+  exportQueueFile?: (args: {
+    filename?: string
+    content: string
+    filters?: { name: string; extensions: string[] }[]
+  }) => Promise<{ success?: boolean; canceled?: boolean; filePath?: string; error?: string }>
+  importQueueFile?: () => Promise<{ success?: boolean; canceled?: boolean; content?: string; filePath?: string; error?: string }>
 }
 
 declare global {

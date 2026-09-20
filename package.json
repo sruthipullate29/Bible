@@ -8,6 +8,8 @@
     "import-translations": "node apps/server/scripts/import-translations.mjs",
     "build": "pnpm --filter @openbeam/web build",
     "build:server": "cd apps/server && cargo build --release",
+    "build:exe": "pnpm build && node -e \"require('fs').cpSync('apps/web/dist', 'electron/dist', {recursive: true})\" && npm run dist:win --prefix electron",
+    "build:electron": "pnpm run build:exe",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
