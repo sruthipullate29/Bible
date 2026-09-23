@@ -30,28 +30,25 @@ import {
   SidebarProvider,
 } from "@/components/ui/sidebar"
 import {
-  MicIcon,
   TvIcon,
   KeyIcon,
   SettingsIcon,
-  CheckIcon,
   BookOpenIcon,
   RadioIcon,
   HelpCircleIcon,
   GraduationCapIcon,
-  BrainCircuitIcon,
+  MusicIcon,
+  CalendarIcon,
 } from "lucide-react"
-import { useSettingsStore } from "@/stores"
+import { useSettingsStore, useSongStore } from "@/stores"
 import { useTutorialStore } from "@/stores/tutorial-store"
 import { api } from "@/services"
 import { useSettingsDialogStore } from "@/lib/settings-dialog"
-import type { DeviceInfo } from "@/types/audio"
 
-type NavSection = "audio" | "speech" | "bible" | "display" | "api-keys" | "remote" | "help"
+type NavSection = "songs" | "bible" | "display" | "api-keys" | "remote" | "help"
 
 const navItems: { name: string; id: NavSection; icon: React.ReactNode }[] = [
-  { name: "Audio", id: "audio", icon: <MicIcon strokeWidth={2} /> },
-  { name: "Speech Recognition", id: "speech", icon: <BrainCircuitIcon strokeWidth={2} /> },
+  { name: "Songs & Sets", id: "songs", icon: <MusicIcon strokeWidth={2} /> },
   { name: "Bible", id: "bible", icon: <BookOpenIcon strokeWidth={2} /> },
   { name: "Display Mode", id: "display", icon: <TvIcon strokeWidth={2} /> },
   { name: "Remote Control", id: "remote", icon: <RadioIcon strokeWidth={2} /> },
@@ -59,128 +56,69 @@ const navItems: { name: string; id: NavSection; icon: React.ReactNode }[] = [
   { name: "Help", id: "help", icon: <HelpCircleIcon strokeWidth={2} /> },
 ]
 
-function AudioSection() {
-  const { audioDeviceId, setAudioDeviceId, gain, setGain } = useSettingsStore()
-  const [devices, setDevices] = useState<DeviceInfo[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const loadDevices = useCallback(async () => {
-    try {
-      setLoading(true)
-      const mediaDevices = await navigator.mediaDevices.enumerateDevices()
-      const audioInputs = mediaDevices.filter((d) => d.kind === "audioinput")
-      setDevices(
-        audioInputs.map((d) => ({
-          id: d.deviceId,
-          name: d.label || `Microphone (${d.deviceId.slice(0, 8)})`,
-          sample_rate: 48000,
-          channels: 1,
-          is_default: d.deviceId === "default",
-        }))
-      )
-    } catch (e) {
-      console.error("[settings] Failed to enumerate audio devices:", e)
-      setDevices([])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    loadDevices()
-  }, [loadDevices])
-
-  const gainPercent = Math.round((gain / 2.0) * 100)
+function SongLibrarySection() {
+  const songs = useSongStore((s) => s.songs)
+  const playlists = useSongStore((s) => s.playlists)
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Input Device
-        </label>
-        <Select
-          value={audioDeviceId ?? "__default__"}
-          onValueChange={(v) => setAudioDeviceId(v === "__default__" ? null : v)}
-          disabled={loading}
-        >
-          <SelectTrigger className="h-8 text-xs">
-            <SelectValue placeholder={loading ? "Loading devices..." : "System default"} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__default__">System default</SelectItem>
-            {devices.map((device) => (
-              <SelectItem key={device.id} value={device.id}>
-                {device.name}{device.is_default ? " (default)" : ""}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-[0.625rem] text-muted-foreground">
-          Selected device persists across sessions. Leave as system default to follow OS audio routing.
+    <div className="flex flex-col gap-5">
+      <div>
+        <h3 className="text-sm font-bold text-foreground">Song Library & Daily Sets</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Manage your permanent songs repository, slide divisions, and daily service playlists.
         </p>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Input Gain</label>
-          <span className="text-xs tabular-nums text-muted-foreground">{gainPercent}%</span>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-lg border border-border bg-card p-3 shadow-xs">
+          <div className="flex items-center gap-2">
+            <MusicIcon className="size-4 text-purple-500" />
+            <span className="text-xs font-semibold">Default Library</span>
+          </div>
+          <p className="mt-2 text-2xl font-bold">{songs.length}</p>
+          <p className="text-[0.65rem] text-muted-foreground mt-0.5">
+            Total permanent songs saved
+          </p>
         </div>
-        <Slider min={0} max={100} step={1} value={[gainPercent]} onValueChange={([v]) => setGain((v / 100) * 2.0)} />
-        <p className="text-[0.625rem] text-muted-foreground">
-          Amplifies the incoming audio signal before transcription. 50% is unity gain.
-        </p>
+
+        <div className="rounded-lg border border-border bg-card p-3 shadow-xs">
+          <div className="flex items-center gap-2">
+            <CalendarIcon className="size-4 text-amber-500" />
+            <span className="text-xs font-semibold">Daily Playlists</span>
+          </div>
+          <p className="mt-2 text-2xl font-bold">{playlists.length}</p>
+          <p className="text-[0.65rem] text-muted-foreground mt-0.5">
+            Scheduled worship service sets
+          </p>
+        </div>
       </div>
-    </div>
-  )
-}
 
-function SpeechSection() {
-  const { deepgramApiKey, setDeepgramApiKey } = useSettingsStore()
-  const [keyValue, setKeyValue] = useState(deepgramApiKey ?? "")
-  const [saved, setSaved] = useState(false)
-  useEffect(() => {
-    window.electronAPI?.getDeepgramKey().then((key) => {
-      if (key) {
-        setKeyValue(key)
-        setDeepgramApiKey(key)
-      }
-    })
-  }, [setDeepgramApiKey])
-  const handleSaveKey = () => {
-    setDeepgramApiKey(keyValue || null)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
-
-  return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3">
-        <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Provider</label>
-        <div className="flex items-start gap-3 rounded-lg border border-primary/50 bg-primary/5 p-3 ring-1 ring-primary/20">
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-foreground">Cloud (Deepgram Nova-3)</span>
-            <p className="text-[0.625rem] leading-relaxed text-muted-foreground">
-              Real-time streaming transcription with keyword boosting for Bible book names.
+      <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-foreground">Multi-Page Song Division</p>
+            <p className="text-[0.65rem] text-muted-foreground">
+              Songs can be divided into custom number of presentation pages (2, 3, 4, 6, 8, etc.) or by lines per page.
             </p>
           </div>
+          <Badge variant="outline" className="text-[0.65rem] text-purple-600 dark:text-purple-400 border-purple-500/30">
+            Active
+          </Badge>
         </div>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Deepgram API Key</label>
-          {deepgramApiKey && <Badge variant="outline" className="text-[0.5rem]">Key configured</Badge>}
+      <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-foreground">Clipboard, Word & PowerPoint Import</p>
+            <p className="text-[0.65rem] text-muted-foreground">
+              Direct import from raw lyrics, Microsoft Word (.docx), or PowerPoint (.pptx) presentations.
+            </p>
+          </div>
+          <Badge variant="outline" className="text-[0.65rem] text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+            Ready
+          </Badge>
         </div>
-        <div className="flex gap-2">
-          <Input type="password" placeholder="Enter your Deepgram API key..." value={keyValue} onChange={(e) => setKeyValue(e.target.value)} className="flex-1 text-xs" />
-          <Button size="sm" onClick={handleSaveKey}>
-            {saved ? (<><CheckIcon className="size-3" />Saved</>) : "Save"}
-          </Button>
-        </div>
-        <p className="text-[0.625rem] text-muted-foreground">
-          Required for live transcription. Get a key at{" "}
-          <a href="https://console.deepgram.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">console.deepgram.com</a>
-        </p>
       </div>
     </div>
   )
@@ -486,8 +424,7 @@ function HelpSection() {
 }
 
 const sectionTitles: Record<NavSection, string> = {
-  audio: "Audio",
-  speech: "Speech Recognition",
+  songs: "Songs & Sets",
   bible: "Bible Translation",
   display: "Display Mode",
   remote: "Remote Control",
@@ -496,8 +433,7 @@ const sectionTitles: Record<NavSection, string> = {
 }
 
 const sectionComponents: Record<NavSection, React.FC> = {
-  audio: AudioSection,
-  speech: SpeechSection,
+  songs: SongLibrarySection,
   bible: BibleSection,
   display: DisplayModeSection,
   remote: RemoteControlSection,

@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-type SettingsSection = "audio" | "speech" | "bible" | "display" | "api-keys" | "remote" | "help"
+type SettingsSection = "songs" | "bible" | "display" | "remote" | "api-keys" | "help"
 
 interface SettingsDialogState {
   isOpen: boolean
@@ -12,7 +12,7 @@ interface SettingsDialogState {
 
 const useSettingsDialogStore = create<SettingsDialogState>((set) => ({
   isOpen: false,
-  activeSection: "audio",
+  activeSection: "songs",
   openSettings: (section) =>
     set((state) => ({
       isOpen: true,
