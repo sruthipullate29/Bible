@@ -31,7 +31,7 @@ import {
   type SongSlide,
   type ParsedSong,
 } from "@/lib/song-parser"
-import { useQueueStore } from "@/stores"
+import { useQueueStore, useSongStore } from "@/stores"
 import type { QueueItem } from "@/types"
 
 interface SongLyricsDialogProps {
@@ -167,8 +167,23 @@ export function SongLyricsDialog({ open, onOpenChange }: SongLyricsDialogProps) 
       added_at: Date.now() + idx,
     }))
 
+    // 1. Permanently save to Default Song Library
+    const savedSong = useSongStore.getState().addSong({
+      title,
+      author: songAuthor.trim() || undefined,
+      category: "Worship",
+      slides: validSlides,
+    })
+
+    // 2. If an active daily playlist is selected, add song to it
+    const activePlaylistId = useSongStore.getState().activePlaylistId
+    if (activePlaylistId) {
+      useSongStore.getState().addSongToPlaylist(activePlaylistId, savedSong.id)
+    }
+
+    // 3. Add slides to live presentation queue
     useQueueStore.getState().appendItems(queueItems)
-    toast.success(`Added ${queueItems.length} slide(s) of "${title}" to presentation queue!`)
+    toast.success(`Saved "${title}" to Default Song Library & added ${queueItems.length} slide(s) to Queue!`)
     onOpenChange(false)
 
     // Reset state for next use

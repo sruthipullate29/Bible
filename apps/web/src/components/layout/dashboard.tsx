@@ -1,5 +1,5 @@
 import { TransportBar } from "@/components/controls/transport-bar"
-import { TranscriptPanel } from "@/components/panels/transcript-panel"
+import { SongLibraryPanel } from "@/components/panels/song-library-panel"
 import { PreviewPanel } from "@/components/panels/preview-panel"
 import { LiveOutputPanel } from "@/components/panels/live-output-panel"
 import { QueuePanel } from "@/components/panels/queue-panel"
@@ -37,11 +37,11 @@ export function Dashboard() {
           gap: "12px",
           minHeight: 0,
           overflow: "hidden",
-          gridTemplateColumns: "320px minmax(0, 1fr) minmax(0, 1fr) 320px",
+          gridTemplateColumns: "340px minmax(0, 1fr) minmax(0, 1fr) 320px",
           gridTemplateRows: "minmax(0, 1fr)",
         }}
       >
-        <TranscriptPanel />
+        <SongLibraryPanel />
         <PreviewPanel />
         <LiveOutputPanel />
         <QueuePanel />

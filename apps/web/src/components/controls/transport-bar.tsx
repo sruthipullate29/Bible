@@ -1,20 +1,16 @@
 import { useState } from "react"
-import { LevelMeter } from "@/components/ui/level-meter"
-import { LiveIndicator } from "@/components/ui/live-indicator"
-import { MicIcon, PaletteIcon, CastIcon, SunIcon, MoonIcon, TvIcon } from "lucide-react"
+import { PaletteIcon, CastIcon, SunIcon, MoonIcon, TvIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { ThemeDesigner } from "@/components/broadcast/theme-designer"
 import { BroadcastSettings } from "@/components/broadcast/broadcast-settings"
-import { useAudioStore, useTranscriptStore, useBroadcastStore } from "@/stores"
+import { useBroadcastStore } from "@/stores"
 import { useTheme } from "@/components/theme-provider"
 import { ScheduleButton } from "@/components/panels/schedule-panel"
 import { cn } from "@/lib/utils"
 
 export function TransportBar() {
   const { theme, setTheme } = useTheme()
-  const audioLevel = useAudioStore((s) => s.level)
-  const isTranscribing = useTranscriptStore((s) => s.isTranscribing)
   const isWiredActive = useBroadcastStore((s) => s.isWiredActive)
   const isMainWiredActive = useBroadcastStore((s) => s.isMainWiredActive)
   const isAltWiredActive = useBroadcastStore((s) => s.isAltWiredActive)
@@ -43,13 +39,8 @@ export function TransportBar() {
         </div>
       </div>
 
-      {/* Right: Audio + Status + Settings */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <MicIcon className="size-3.5 text-muted-foreground" />
-          <LevelMeter level={audioLevel.rms} bars={4} />
-        </div>
-        <LiveIndicator active={isTranscribing} />
+      {/* Right: Controls + Status + Settings */}
+      <div className="flex items-center gap-2.5">
         <Button
           variant="ghost"
           size="icon-sm"
