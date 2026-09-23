@@ -60,6 +60,18 @@ export function SongEditDialog({ song, open, onOpenChange, onSaved }: SongEditDi
     }
   }, [song, open])
 
+  // Sync currently selected slide to Program Preview
+  useEffect(() => {
+    if (!open) return
+    const slide = slides[selectedSlideIdx]
+    if (slide && slide.text) {
+      useBroadcastStore.getState().setPreviewVerse({
+        reference: `${title || "Song"} - ${slide.label}`,
+        segments: [{ verseNumber: 1, text: slide.text }],
+      })
+    }
+  }, [open, selectedSlideIdx, title, slides])
+
   // Extract all lines from current slides into a flat array of lines
   const getAllLines = (currentSlides: SongSlide[]): string[] => {
     const lines: string[] = []
@@ -227,8 +239,7 @@ export function SongEditDialog({ song, open, onOpenChange, onSaved }: SongEditDi
   }
 
   const handleProjectLive = (slide: SongSlide) => {
-    useBroadcastStore.getState().setLive(true)
-    useBroadcastStore.getState().setLiveVerse({
+    const renderData = {
       reference: `${title || "Song"} - ${slide.label}`,
       segments: [
         {
@@ -236,7 +247,8 @@ export function SongEditDialog({ song, open, onOpenChange, onSaved }: SongEditDi
           text: slide.text,
         },
       ],
-    })
+    }
+    useBroadcastStore.getState().projectVerse(renderData)
     toast.success(`Projected "${title} - ${slide.label}" live!`)
   }
 

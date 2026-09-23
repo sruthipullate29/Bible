@@ -78,6 +78,7 @@ interface BroadcastState {
   altEnabled: boolean
   isLive: boolean
   liveVerse: VerseRenderData | null
+  previewVerse: VerseRenderData | null
 
   // Wired display state
   isWiredActive: boolean
@@ -121,6 +122,8 @@ interface BroadcastState {
   setAltEnabled: (enabled: boolean) => void
   setLive: (live: boolean) => void
   setLiveVerse: (verse: VerseRenderData | null) => void
+  setPreviewVerse: (verse: VerseRenderData | null) => void
+  projectVerse: (verse: VerseRenderData) => void
   syncBroadcastOutput: () => void
   syncBroadcastOutputFor: (outputId: string) => void
 
@@ -177,6 +180,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   altEnabled: savedBroadcast.altEnabled ?? true,
   isLive: false,
   liveVerse: null,
+  previewVerse: null,
   isDesignerOpen: false,
   editingThemeId: null,
   draftTheme: null,
@@ -569,6 +573,16 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   },
   setLiveVerse: (liveVerse) => {
     set({ liveVerse })
+    get().syncBroadcastOutput()
+  },
+  setPreviewVerse: (previewVerse) => {
+    set({ previewVerse })
+  },
+  projectVerse: (verse) => {
+    set({ liveVerse: verse, previewVerse: verse, isLive: true })
+    if (get().wiredAutoConnect) {
+      get().openBothWiredDisplays()
+    }
     get().syncBroadcastOutput()
   },
 

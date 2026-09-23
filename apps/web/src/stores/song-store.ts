@@ -31,6 +31,7 @@ export interface SongState {
   loadSongToQueue: (songId: string) => void
   loadPlaylistToQueue: (playlistId: string, append?: boolean) => void
   presentSlideDirectly: (slide: SongSlide, songTitle: string) => void
+  previewSlideDirectly: (slide: SongSlide, songTitle: string) => void
 }
 
 function getTodayIsoDate(): string {
@@ -343,8 +344,7 @@ export const useSongStore = create<SongState>()(
       },
 
       presentSlideDirectly: (slide, songTitle) => {
-        useBroadcastStore.getState().setLive(true)
-        useBroadcastStore.getState().setLiveVerse({
+        const renderData = {
           reference: `${songTitle} - ${slide.label}`,
           segments: [
             {
@@ -352,7 +352,21 @@ export const useSongStore = create<SongState>()(
               text: slide.text,
             },
           ],
-        })
+        }
+        useBroadcastStore.getState().projectVerse(renderData)
+      },
+
+      previewSlideDirectly: (slide, songTitle) => {
+        const renderData = {
+          reference: `${songTitle} - ${slide.label}`,
+          segments: [
+            {
+              verseNumber: 1,
+              text: slide.text,
+            },
+          ],
+        }
+        useBroadcastStore.getState().setPreviewVerse(renderData)
       },
     }),
     {

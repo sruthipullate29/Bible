@@ -28,6 +28,8 @@ export function PreviewPanel() {
 
   const themes = useBroadcastStore((s) => s.themes)
   const activeThemeId = useBroadcastStore((s) => s.activeThemeId)
+  const previewVerse = useBroadcastStore((s) => s.previewVerse)
+  const liveVerse = useBroadcastStore((s) => s.liveVerse)
 
   const activeTheme = themes.find((t) => t.id === activeThemeId) ?? themes[0]
   const translation = translations.find((t) => t.id === activeTranslationId)?.abbreviation ?? "NIV"
@@ -54,6 +56,11 @@ export function PreviewPanel() {
       )
     : null
 
+  // Resolution order for Program Preview:
+  // 1. Explicitly previewed song / slide / verse in broadcastStore (previewVerse)
+  // 2. Currently selected Bible verse (verseData)
+  // 3. Currently live output (liveVerse)
+  const displayData = previewVerse ?? verseData ?? liveVerse
 
   return (
     <div
@@ -62,7 +69,7 @@ export function PreviewPanel() {
     >
       <PanelHeader title="Program preview" />
       <div className="flex min-h-0 flex-1 items-center justify-center p-3">
-        <CanvasVerse theme={activeTheme} verse={verseData} />
+        <CanvasVerse theme={activeTheme} verse={displayData} />
       </div>
     </div>
   )

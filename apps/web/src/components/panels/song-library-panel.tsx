@@ -46,6 +46,8 @@ export function SongLibraryPanel() {
   const removeSongFromPlaylist = useSongStore((s) => s.removeSongFromPlaylist)
   const reorderSongsInPlaylist = useSongStore((s) => s.reorderSongsInPlaylist)
   const presentSlideDirectly = useSongStore((s) => s.presentSlideDirectly)
+  const previewSlideDirectly = useSongStore((s) => s.previewSlideDirectly)
+  const setSelectedSong = useSongStore((s) => s.setSelectedSong)
   const createPlaylist = useSongStore((s) => s.createPlaylist)
 
   const [activeTab, setActiveTab] = useState<"default" | "playlists">("default")
@@ -238,9 +240,14 @@ export function SongLibraryPanel() {
                   >
                     <div className="flex items-center justify-between p-2 gap-2">
                       <button
-                        onClick={() =>
-                          setExpandedSongId(isExpanded ? null : song.id)
-                        }
+                        onClick={() => {
+                          const nextExpanded = !isExpanded
+                          setExpandedSongId(nextExpanded ? song.id : null)
+                          setSelectedSong(song.id)
+                          if (song.slides[0]) {
+                            previewSlideDirectly(song.slides[0], song.title)
+                          }
+                        }}
                         className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
                       >
                         {isExpanded ? (
@@ -630,6 +637,19 @@ export function SongLibraryPanel() {
 
                         {/* Track Actions */}
                         <div className="flex items-center gap-0.5">
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            title="Project first slide live"
+                            onClick={() => {
+                              if (song.slides[0]) {
+                                presentSlideDirectly(song.slides[0], song.title)
+                                toast.success(`Projected "${song.title}" live!`)
+                              }
+                            }}
+                          >
+                            <PlayIcon className="size-2.5 text-emerald-500" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon-xs"

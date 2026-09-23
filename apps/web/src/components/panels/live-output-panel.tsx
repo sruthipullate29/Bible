@@ -43,6 +43,8 @@ export function LiveOutputPanel() {
   const secondaryVerse =
     secondaryVerseFromChapter ?? ((selectedVerse as any)?.secondaryVerse as Verse | null) ?? null
 
+  const liveVerse = useBroadcastStore((s) => s.liveVerse)
+
   const verseData = useMemo(
     () =>
       deriveLiveVerse({
@@ -56,8 +58,10 @@ export function LiveOutputPanel() {
   )
 
   useEffect(() => {
-    useBroadcastStore.getState().setLiveVerse(verseData)
-  }, [verseData])
+    if (selectedVerse && isLive && verseData) {
+      useBroadcastStore.getState().setLiveVerse(verseData)
+    }
+  }, [selectedVerse, verseData, isLive])
 
   return (
     <div
@@ -106,7 +110,13 @@ export function LiveOutputPanel() {
             <span>Wi-Fi Cast</span>
           </button>
           <button
-            onClick={() => useBroadcastStore.getState().setLive(!isLive)}
+            onClick={() => {
+              const nextLive = !isLive
+              useBroadcastStore.getState().setLive(nextLive)
+              if (nextLive && !liveVerse && verseData) {
+                useBroadcastStore.getState().setLiveVerse(verseData)
+              }
+            }}
             className={cn(
               "flex items-center gap-2 rounded-full px-2.5 py-1 text-[0.625rem] font-medium uppercase tracking-wider transition-all",
               isLive
@@ -133,7 +143,7 @@ export function LiveOutputPanel() {
           !isLive && "opacity-40"
         )}
       >
-        <CanvasVerse theme={activeTheme} verse={verseData} />
+        <CanvasVerse theme={activeTheme} verse={liveVerse ?? verseData} />
       </div>
     </div>
   )

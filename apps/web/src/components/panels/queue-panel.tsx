@@ -43,8 +43,7 @@ function QueueItemRow({
 
     // If this is a song lyric slide or non-Bible reference, display directly
     if (item.source === "song" || !parseReference(item.reference)) {
-      useBroadcastStore.getState().setLive(true)
-      useBroadcastStore.getState().setLiveVerse({
+      const renderData = {
         reference: item.reference,
         segments: [
           {
@@ -54,7 +53,8 @@ function QueueItemRow({
               : item.verse.text,
           },
         ],
-      })
+      }
+      useBroadcastStore.getState().projectVerse(renderData)
       return
     }
 
@@ -144,16 +144,14 @@ function QueueItemRow({
     const verseToSelect = secVerse ? { ...primaryVerse, secondaryVerse: secVerse } : primaryVerse
     bibleActions.selectVerse(verseToSelect)
 
-    // 2. Set live on broadcast screen
-    useBroadcastStore.getState().setLive(true)
-    useBroadcastStore.getState().setLiveVerse(
-      toVerseRenderData(
-        primaryVerse,
-        primaryAbbr,
-        isDualMode ? secVerse : null,
-        isDualMode ? secondaryAbbr : undefined
-      )
+    // 2. Set live on broadcast screen & program preview
+    const rendered = toVerseRenderData(
+      primaryVerse,
+      primaryAbbr,
+      isDualMode ? secVerse : null,
+      isDualMode ? secondaryAbbr : undefined
     )
+    useBroadcastStore.getState().projectVerse(rendered)
 
     // 3. Navigate Book Search to this chapter and highlight the verse
     bibleActions.navigateToVerse(bookNumber, chapter, verse)
