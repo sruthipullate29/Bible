@@ -141,6 +141,34 @@ export function SongLyricsDialog({ open, onOpenChange }: SongLyricsDialogProps) 
     setSlides((prev) => [...prev, newSlide])
   }
 
+  const handleDivideIntoPages = (targetPages: number) => {
+    if (targetPages <= 0) return
+    const allLines: string[] = []
+    for (const slide of slides) {
+      for (const line of slide.text.split(/\r?\n/)) {
+        if (line.trim()) allLines.push(line.trim())
+      }
+    }
+    if (allLines.length === 0) {
+      toast.warning("No lyrics to divide yet.")
+      return
+    }
+
+    const linesPerPage = Math.ceil(allLines.length / targetPages)
+    const newSlides: SongSlide[] = []
+    for (let p = 0; p < targetPages; p++) {
+      const pageLines = allLines.slice(p * linesPerPage, (p + 1) * linesPerPage)
+      if (pageLines.length === 0) break
+      newSlides.push({
+        id: `slide-${Date.now()}-${p + 1}`,
+        label: `Page ${p + 1}`,
+        text: pageLines.join("\n"),
+      })
+    }
+    setSlides(newSlides)
+    toast.success(`Divided into ${newSlides.length} pages (${linesPerPage} lines each)`)
+  }
+
   const handleAddToQueue = () => {
     const validSlides = slides.filter((s) => s.text.trim().length > 0)
     if (validSlides.length === 0) {
@@ -357,20 +385,41 @@ export function SongLyricsDialog({ open, onOpenChange }: SongLyricsDialogProps) 
 
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold">Presentation Slides</span>
+              <span className="text-xs font-semibold">Presentation Pages / Slides</span>
               <Badge variant="secondary" className="text-[0.65rem] px-1.5 h-4">
-                {slides.length} slide{slides.length === 1 ? "" : "s"}
+                {slides.length} page{slides.length === 1 ? "" : "s"}
               </Badge>
             </div>
-            <Button
-              variant="outline"
-              size="xs"
-              onClick={handleAddNewSlide}
-              className="gap-1 text-xs h-7"
-            >
-              <PlusIcon className="size-3" />
-              Add Blank Slide
-            </Button>
+            <div className="flex items-center gap-1.5">
+              {slides.length > 0 && (
+                <div className="flex items-center gap-1 bg-muted/50 rounded-md px-1.5 py-0.5 border border-border/60">
+                  <span className="text-[0.6rem] text-muted-foreground font-medium">Divide into:</span>
+                  {[2, 3, 4, 6].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => handleDivideIntoPages(num)}
+                      className={`text-[0.6rem] px-1.5 py-0.5 rounded transition-colors font-semibold ${
+                        slides.length === num
+                          ? "bg-purple-600 text-white"
+                          : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {num} pgs
+                    </button>
+                  ))}
+                </div>
+              )}
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={handleAddNewSlide}
+                className="gap-1 text-xs h-7"
+              >
+                <PlusIcon className="size-3" />
+                Add Blank Page
+              </Button>
+            </div>
           </div>
 
           {/* Scrollable Slide List */}

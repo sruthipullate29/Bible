@@ -24,10 +24,14 @@ import {
   FolderPlusIcon,
   LayersIcon,
   LibraryIcon,
+  Edit3Icon,
+  SplitIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 import { useSongStore } from "@/stores/song-store"
 import { SongLyricsDialog } from "@/components/song/song-lyrics-dialog"
+import { SongEditDialog } from "@/components/song/song-edit-dialog"
+import type { Song } from "@/types"
 
 export function SongLibraryPanel() {
   const songs = useSongStore((s) => s.songs)
@@ -49,6 +53,8 @@ export function SongLibraryPanel() {
   const [selectedCategory, setSelectedCategory] = useState<string>("All")
   const [expandedSongId, setExpandedSongId] = useState<string | null>(null)
   const [isSongDialogOpen, setIsSongDialogOpen] = useState(false)
+  const [editingSong, setEditingSong] = useState<Song | null>(null)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isNewPlaylistOpen, setIsNewPlaylistOpen] = useState(false)
   const [newPlaylistName, setNewPlaylistName] = useState("")
   const [newPlaylistDate, setNewPlaylistDate] = useState(() => {
@@ -108,6 +114,12 @@ export function SongLibraryPanel() {
       <SongLyricsDialog
         open={isSongDialogOpen}
         onOpenChange={setIsSongDialogOpen}
+      />
+
+      <SongEditDialog
+        song={editingSong}
+        open={isEditDialogOpen}
+        onOpenChange={setIsEditDialogOpen}
       />
 
       <PanelHeader
@@ -263,6 +275,19 @@ export function SongLibraryPanel() {
 
                       {/* Song Actions */}
                       <div className="flex items-center gap-0.5 shrink-0">
+                        {/* Edit Song & Divide Pages */}
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          title="Edit Song & Divide Pages"
+                          onClick={() => {
+                            setEditingSong(song)
+                            setIsEditDialogOpen(true)
+                          }}
+                        >
+                          <Edit3Icon className="size-3 text-purple-500" />
+                        </Button>
+
                         {/* Present First Slide Live */}
                         <Button
                           variant="ghost"
@@ -342,6 +367,23 @@ export function SongLibraryPanel() {
                     {/* Expanded Slide Preview */}
                     {isExpanded && (
                       <div className="border-t border-border/60 bg-muted/20 p-2 space-y-1.5">
+                        <div className="flex items-center justify-between pb-1 border-b border-border/40">
+                          <span className="text-[0.65rem] font-semibold text-muted-foreground">
+                            Divided into {song.slides.length} pages
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            className="h-5 gap-1 text-[0.625rem] border-purple-500/30 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10 font-medium"
+                            onClick={() => {
+                              setEditingSong(song)
+                              setIsEditDialogOpen(true)
+                            }}
+                          >
+                            <SplitIcon className="size-2.5" />
+                            Edit / Divide Pages
+                          </Button>
+                        </div>
                         {song.slides.map((slide, sIdx) => (
                           <div
                             key={slide.id}
@@ -588,6 +630,17 @@ export function SongLibraryPanel() {
 
                         {/* Track Actions */}
                         <div className="flex items-center gap-0.5">
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            title="Edit Song & Divide Pages"
+                            onClick={() => {
+                              setEditingSong(song)
+                              setIsEditDialogOpen(true)
+                            }}
+                          >
+                            <Edit3Icon className="size-2.5 text-purple-500" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon-xs"
