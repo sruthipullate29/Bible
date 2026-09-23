@@ -34,7 +34,15 @@ import {
   PlayIcon,
   SquareIcon,
   PaletteIcon,
+  QrCode as QrCodeIcon,
+  Smartphone as SmartphoneIcon,
+  Video as VideoIcon,
+  Radio as RadioIcon,
+  Layers as LayersIcon,
+  Code as CodeIcon,
+  Sparkles as SparklesIcon,
 } from "lucide-react"
+import { QrCodeView } from "@/components/broadcast/qr-code"
 
 export function BroadcastSettings({
   open,
@@ -93,6 +101,10 @@ export function BroadcastSettings({
   const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null)
   const [selectedIp, setSelectedIp] = useState<string>("")
   const [lanCopied, setLanCopied] = useState(false)
+  const [showQrFor, setShowQrFor] = useState<"main" | "alt" | null>(null)
+  const [obsCopied, setObsCopied] = useState(false)
+  const [obsCssCopied, setObsCssCopied] = useState(false)
+  const [altLanCopied, setAltLanCopied] = useState(false)
 
   const sessionId = getSessionId()
 
@@ -288,8 +300,11 @@ export function BroadcastSettings({
   const port = networkInfo?.port || 4001
   const activeLanHost = selectedIp ? `${selectedIp}:${port}` : window.location.host
   const lanOverlayUrl = `http://${activeLanHost}/overlay.html?role=overlay&output=main&session=${sessionId}`
+  const obsOverlayUrl = `http://${activeLanHost}/overlay.html?role=overlay&output=main&session=${sessionId}&transparent=1`
   const localhostOverlayUrl = `${window.location.origin}/overlay.html?role=overlay&output=main&session=${sessionId}`
   const altOverlayUrl = `${window.location.origin}/overlay.html?role=overlay&output=alt&session=${sessionId}`
+  const altLanOverlayUrl = `http://${activeLanHost}/overlay.html?role=overlay&output=alt&session=${sessionId}`
+  const obsCssSnippet = "body { background-color: rgba(0, 0, 0, 0) !important; margin: 0px auto; overflow: hidden; }"
 
   const copyUrl = async (url: string, setCopied: (v: boolean) => void) => {
     try {
@@ -617,118 +632,323 @@ export function BroadcastSettings({
               TAB 2: WIRELESS BROADCAST
           ───────────────────────────────────────────────────────────── */}
           <TabsContent value="wireless" className="mt-4 space-y-4">
-            <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-              <div>
-                <h4 className="text-sm font-medium flex items-center gap-2">
-                  <WifiIcon className="size-4 text-primary" />
-                  Wireless Network Streaming (Wi-Fi & LAN)
-                </h4>
-                <p className="text-xs text-muted-foreground">
-                  Transmit verses wirelessly to smart TVs, iPads, tablets, mobile devices, wireless beamers, or OBS Studio over local Wi-Fi.
-                </p>
-              </div>
-
-              {/* Wi-Fi URL Card */}
-              <div className="rounded-md border border-border/70 bg-background/60 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 text-[0.6875rem]">
-                      Wi-Fi / LAN Network Link
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">For tablets, smart TVs, and wireless devices</span>
+            {/* Real-time Server & Network Status Banner */}
+            <div className="relative overflow-hidden rounded-xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 via-background to-teal-500/5 p-4 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="relative flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-inner">
+                    <RadioIcon className="size-5 animate-pulse" />
+                    <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-emerald-400 animate-ping" />
                   </div>
-                  {networkInfo?.ips && networkInfo.ips.length > 1 && (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[0.6875rem] text-muted-foreground">Network Interface:</span>
-                      <select
-                        value={selectedIp}
-                        onChange={(e) => setSelectedIp(e.target.value)}
-                        className="rounded border border-border bg-background px-2 py-0.5 text-xs text-foreground"
-                      >
-                        {networkInfo.ips.map((ip) => (
-                          <option key={ip.address} value={ip.address}>
-                            {ip.name} ({ip.address})
-                          </option>
-                        ))}
-                      </select>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-semibold tracking-tight text-foreground">
+                        Wireless Broadcast Server Active
+                      </h4>
+                      <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/15 text-[0.65rem] font-semibold text-emerald-400">
+                        Port {port}
+                      </Badge>
                     </div>
-                  )}
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Stream verses live to Smart TVs, iPads, tablets, mobile devices & OBS Studio with zero cables.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="flex gap-2">
-                  <code className="flex-1 rounded border border-border bg-background px-2.5 py-1.5 text-xs font-mono text-muted-foreground select-all truncate">
-                    {lanOverlayUrl}
-                  </code>
+                {networkInfo?.ips && networkInfo.ips.length > 1 && (
+                  <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-background/80 px-2.5 py-1.5 shadow-xs">
+                    <WifiIcon className="size-3.5 text-muted-foreground" />
+                    <span className="text-[0.6875rem] font-medium text-muted-foreground whitespace-nowrap">Interface:</span>
+                    <select
+                      value={selectedIp}
+                      onChange={(e) => setSelectedIp(e.target.value)}
+                      className="cursor-pointer rounded border-0 bg-transparent text-xs font-semibold text-foreground focus:outline-none"
+                    >
+                      {networkInfo.ips.map((ip) => (
+                        <option key={ip.address} value={ip.address} className="bg-popover text-foreground">
+                          {ip.name} ({ip.address})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Destination 1: Mobile & Smart TV Wireless Screen (Audience / Sanctuary) */}
+            <div className="rounded-xl border border-emerald-500/25 bg-card/95 p-4 shadow-sm transition-all hover:border-emerald-500/40 space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
+                    <SmartphoneIcon className="size-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-foreground">
+                        Smart TV, Tablet & Mobile Display (Wi-Fi)
+                      </span>
+                      <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-[0.625rem] text-emerald-400">
+                        Main Screen
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Full-screen presentation with automatic keep-awake and 16:9 responsive centering.
+                    </p>
+                  </div>
+                </div>
+
+                <Button
+                  variant={showQrFor === "main" ? "default" : "outline"}
+                  size="xs"
+                  className={cn(
+                    "gap-1.5 text-xs h-7 shrink-0",
+                    showQrFor === "main" ? "bg-emerald-600 hover:bg-emerald-500 text-white" : "border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                  )}
+                  onClick={() => setShowQrFor(showQrFor === "main" ? null : "main")}
+                >
+                  <QrCodeIcon className="size-3.5" />
+                  <span>{showQrFor === "main" ? "Hide QR" : "Scan QR Code"}</span>
+                </Button>
+              </div>
+
+              {/* QR Code Reveal Panel */}
+              {showQrFor === "main" && (
+                <div className="flex flex-col sm:flex-row items-center gap-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <QrCodeView url={lanOverlayUrl} size={130} />
+                  <div className="space-y-1.5 text-center sm:text-left">
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[0.6875rem] font-semibold text-emerald-300">
+                      <SparklesIcon className="size-3" />
+                      Instant Wi-Fi Connection
+                    </div>
+                    <h5 className="text-xs font-semibold text-foreground">
+                      Point camera to connect tablet or phone
+                    </h5>
+                    <p className="text-[0.7rem] text-muted-foreground max-w-sm leading-relaxed">
+                      Scan this code with any iPhone, iPad, Android or Smart TV browser. No app install needed. Tap screen or press <kbd className="rounded border border-border px-1 py-0.5 font-mono text-[0.625rem]">F</kbd> for fullscreen.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* URL & Action Controls */}
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <input
+                    readOnly
+                    value={lanOverlayUrl}
+                    className="w-full rounded-lg border border-border/80 bg-background/90 px-3 py-2 text-xs font-mono text-foreground select-all focus:outline-none focus:ring-1 focus:ring-primary shadow-xs"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="gap-1.5 text-xs shrink-0"
+                    className="gap-1.5 text-xs h-8"
                     onClick={() => copyUrl(lanOverlayUrl, setLanCopied)}
                   >
                     {lanCopied ? (
                       <>
-                        <CheckIcon className="size-3 text-emerald-400" />
-                        Copied
+                        <CheckIcon className="size-3.5 text-emerald-400" />
+                        <span className="text-emerald-400 font-medium">Copied</span>
                       </>
                     ) : (
                       <>
-                        <CopyIcon className="size-3" />
-                        Copy Link
+                        <CopyIcon className="size-3.5" />
+                        <span>Copy Link</span>
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="gap-1.5 text-xs h-8 bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
+                    onClick={() => window.open(lanOverlayUrl, "_blank")}
+                  >
+                    <ExternalLinkIcon className="size-3.5" />
+                    <span>Open Screen</span>
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Destination 2: OBS Studio & vMix Streaming Source (Alpha Transparency) */}
+            <div className="rounded-xl border border-indigo-500/25 bg-card/95 p-4 shadow-sm transition-all hover:border-indigo-500/40 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-400">
+                    <VideoIcon className="size-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-foreground">
+                        OBS Studio & vMix Stream Overlay
+                      </span>
+                      <Badge variant="outline" className="border-indigo-500/30 bg-indigo-500/10 text-[0.625rem] text-indigo-400">
+                        Alpha Transparency
+                      </Badge>
+                      <Badge variant="outline" className="border-border text-[0.625rem] text-muted-foreground hidden sm:inline-flex">
+                        1080p @ 60FPS
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Lower-thirds & verse overlays with transparent background for live streaming.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <input
+                    readOnly
+                    value={obsOverlayUrl}
+                    className="w-full rounded-lg border border-border/80 bg-background/90 px-3 py-2 text-xs font-mono text-foreground select-all focus:outline-none focus:ring-1 focus:ring-indigo-400 shadow-xs"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-xs h-8"
+                    onClick={() => copyUrl(obsOverlayUrl, setObsCopied)}
+                  >
+                    {obsCopied ? (
+                      <>
+                        <CheckIcon className="size-3.5 text-emerald-400" />
+                        <span className="text-emerald-400 font-medium">Copied URL</span>
+                      </>
+                    ) : (
+                      <>
+                        <CopyIcon className="size-3.5" />
+                        <span>Copy OBS URL</span>
                       </>
                     )}
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="gap-1.5 text-xs shrink-0"
-                    onClick={() => window.open(lanOverlayUrl, "_blank")}
+                    className="gap-1.5 text-xs h-8 border-indigo-500/30 hover:bg-indigo-500/10 text-indigo-400"
+                    onClick={() => copyUrl(obsCssSnippet, setObsCssCopied)}
                   >
-                    <ExternalLinkIcon className="size-3" />
-                    Open
+                    {obsCssCopied ? (
+                      <>
+                        <CheckIcon className="size-3.5 text-emerald-400" />
+                        <span className="text-emerald-400 font-medium">Copied CSS</span>
+                      </>
+                    ) : (
+                      <>
+                        <CodeIcon className="size-3.5" />
+                        <span>Copy Custom CSS</span>
+                      </>
+                    )}
                   </Button>
                 </div>
-                <p className="text-[0.6875rem] text-muted-foreground/80">
-                  Open this link in any browser on devices connected to the same Wi-Fi network.
-                </p>
               </div>
 
-              {/* Localhost OBS URL Card */}
-              <div className="rounded-md border border-border/70 bg-background/60 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="bg-muted text-foreground/80 text-[0.6875rem]">
-                      Localhost / OBS Studio Source
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">For OBS / vMix on this computer</span>
+              {/* OBS Quick Config Help */}
+              <div className="rounded-lg border border-border/60 bg-muted/40 p-2.5 text-[0.6875rem] text-muted-foreground flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-foreground/80">OBS Settings:</span>
+                  <span>Width: <strong className="text-foreground">1920</strong>, Height: <strong className="text-foreground">1080</strong>, Shutdown when not visible: <strong className="text-foreground">Checked</strong></span>
+                </div>
+                <code className="text-[0.625rem] font-mono text-muted-foreground bg-background/80 px-2 py-0.5 rounded border border-border/60">
+                  body {"{ background: transparent !important; }"}
+                </code>
+              </div>
+            </div>
+
+            {/* Destination 3: Stage & Musician Confidence Monitor (output=alt) */}
+            <div className="rounded-xl border border-amber-500/25 bg-card/95 p-4 shadow-sm transition-all hover:border-amber-500/40 space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
+                    <LayersIcon className="size-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-foreground">
+                        Stage & Pulpit Confidence Monitor (Wi-Fi)
+                      </span>
+                      <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-[0.625rem] text-amber-400">
+                        Alternative Channel (Alt)
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Wireless feed for pulpit monitor, choir tablets, or Telugu / bilingual preview.
+                    </p>
                   </div>
                 </div>
 
-                <div className="flex gap-2">
-                  <code className="flex-1 rounded border border-border bg-background px-2.5 py-1.5 text-xs font-mono text-muted-foreground select-all truncate">
-                    {localhostOverlayUrl}
-                  </code>
+                <Button
+                  variant={showQrFor === "alt" ? "default" : "outline"}
+                  size="xs"
+                  className={cn(
+                    "gap-1.5 text-xs h-7 shrink-0",
+                    showQrFor === "alt" ? "bg-amber-600 hover:bg-amber-500 text-white" : "border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                  )}
+                  onClick={() => setShowQrFor(showQrFor === "alt" ? null : "alt")}
+                >
+                  <QrCodeIcon className="size-3.5" />
+                  <span>{showQrFor === "alt" ? "Hide QR" : "Stage QR"}</span>
+                </Button>
+              </div>
+
+              {/* Alt QR Code Reveal */}
+              {showQrFor === "alt" && (
+                <div className="flex flex-col sm:flex-row items-center gap-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <QrCodeView url={altLanOverlayUrl} size={130} />
+                  <div className="space-y-1.5 text-center sm:text-left">
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 px-2.5 py-0.5 text-[0.6875rem] font-semibold text-amber-300">
+                      <LayersIcon className="size-3" />
+                      Stage Display Stream
+                    </div>
+                    <h5 className="text-xs font-semibold text-foreground">
+                      Scan to connect stage / pulpit tablet
+                    </h5>
+                    <p className="text-[0.7rem] text-muted-foreground max-w-sm leading-relaxed">
+                      Opens the dedicated Alternative Output stream directly on the musician or pastor tablet.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <input
+                    readOnly
+                    value={altLanOverlayUrl}
+                    className="w-full rounded-lg border border-border/80 bg-background/90 px-3 py-2 text-xs font-mono text-foreground select-all focus:outline-none focus:ring-1 focus:ring-amber-400 shadow-xs"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="gap-1.5 text-xs shrink-0"
-                    onClick={() => copyUrl(localhostOverlayUrl, setMainCopied)}
+                    className="gap-1.5 text-xs h-8"
+                    onClick={() => copyUrl(altLanOverlayUrl, setAltLanCopied)}
                   >
-                    {mainCopied ? (
+                    {altLanCopied ? (
                       <>
-                        <CheckIcon className="size-3 text-emerald-400" />
-                        Copied
+                        <CheckIcon className="size-3.5 text-emerald-400" />
+                        <span className="text-emerald-400 font-medium">Copied</span>
                       </>
                     ) : (
                       <>
-                        <CopyIcon className="size-3" />
-                        Copy Link
+                        <CopyIcon className="size-3.5" />
+                        <span>Copy Link</span>
                       </>
                     )}
                   </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-xs h-8"
+                    onClick={() => window.open(altLanOverlayUrl, "_blank")}
+                  >
+                    <ExternalLinkIcon className="size-3.5" />
+                    <span>Open View</span>
+                  </Button>
                 </div>
-                <p className="text-[0.6875rem] text-muted-foreground/80">
-                  Add this as a Browser Source in OBS Studio with width 1920 and height 1080.
-                </p>
               </div>
             </div>
           </TabsContent>

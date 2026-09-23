@@ -5,6 +5,13 @@ import "./index.css"
 import { renderVerse } from "@/lib/verse-renderer"
 import { OpenBeamSocket } from "@/services/ws"
 import type { BroadcastTheme, VerseRenderData } from "@/types/broadcast"
+import {
+  Maximize2Icon,
+  Minimize2Icon,
+  SunIcon,
+  SunMoonIcon,
+  RadioIcon,
+} from "lucide-react"
 
 interface BroadcastPayload {
   theme: BroadcastTheme | null
@@ -17,6 +24,11 @@ const params = new URLSearchParams(window.location.search)
 const themeFilter = params.get("theme")
 const resolutionParam = params.get("resolution")
 const outputId = params.get("output") || "main"
+const isTransparent =
+  params.get("transparent") === "1" ||
+  params.get("transparent") === "true" ||
+  params.get("bg") === "transparent"
+
 const expectLabel = outputId === "alt" ? "broadcast-alt" : "broadcast"
 
 let initWidth = 1920
@@ -38,9 +50,17 @@ const overlaySocket = new OpenBeamSocket(
 
 function BroadcastCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const latestData = useRef<BroadcastPayload | null>(null)
   const imageCacheRef = useRef<Map<string, HTMLImageElement>>(new Map())
+
   const [connected, setConnected] = useState(false)
+  const [hasVerse, setHasVerse] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [wakeLockActive, setWakeLockActive] = useState(false)
+  const [showControls, setShowControls] = useState(false)
+  const hideControlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wakeLockRef = useRef<any>(null)
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -50,21 +70,41 @@ function BroadcastCanvas() {
 
     const data = latestData.current
     if (!data || data.enabled === false || !data.theme) {
-      ctx.fillStyle = "#000"
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      if (isTransparent) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+      } else {
+        ctx.fillStyle = "#000000"
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+      }
+      setHasVerse(false)
       return
     }
 
     const { theme, verse } = data
     canvas.width = theme.resolution.width
     canvas.height = theme.resolution.height
+
+    if (isTransparent && !verse) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      setHasVerse(false)
+      return
+    }
+
     const result = renderVerse(ctx, theme, verse, {
       scale: 1,
       imageCache: imageCacheRef.current,
     })
+
     if (!result) {
-      ctx.fillStyle = "#000"
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      if (isTransparent) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+      } else {
+        ctx.fillStyle = "#000000"
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+      }
+      setHasVerse(false)
+    } else {
+      setHasVerse(Boolean(verse))
     }
   }, [])
 
@@ -83,14 +123,94 @@ function BroadcastCanvas() {
         draw()
       }
       img.onerror = () => {
-        console.warn("[broadcast-output] failed to load background image", {
-          url,
-        })
+        console.warn("[broadcast-output] failed to load background image", { url })
       }
       img.src = url
     },
     [draw]
   )
+
+  // Wake Lock for mobile/tablet screens to keep screen awake during church service
+  const toggleWakeLock = async () => {
+    if ("wakeLock" in navigator) {
+      try {
+        if (!wakeLockActive) {
+          const lock = await (navigator as any).wakeLock.request("screen")
+          wakeLockRef.current = lock
+          setWakeLockActive(true)
+          lock.addEventListener("release", () => {
+            setWakeLockActive(false)
+            wakeLockRef.current = null
+          })
+        } else if (wakeLockRef.current) {
+          await wakeLockRef.current.release()
+          wakeLockRef.current = null
+          setWakeLockActive(false)
+        }
+      } catch (err) {
+        console.warn("[overlay] Wake Lock error:", err)
+      }
+    }
+  }
+
+  // Auto-acquire wakeLock if available
+  useEffect(() => {
+    if ("wakeLock" in navigator) {
+      (navigator as any).wakeLock
+        .request("screen")
+        .then((lock: any) => {
+          wakeLockRef.current = lock
+          setWakeLockActive(true)
+          lock.addEventListener("release", () => setWakeLockActive(false))
+        })
+        .catch(() => {})
+    }
+    return () => {
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(() => {})
+      }
+    }
+  }, [])
+
+  // Fullscreen toggle
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {})
+      setIsFullscreen(true)
+    } else {
+      document.exitFullscreen().catch(() => {})
+      setIsFullscreen(false)
+    }
+  }
+
+  // Keyboard shortcut: 'F' for fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "f" || e.key === "F") {
+        toggleFullscreen()
+      }
+    }
+    const handleFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement))
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    document.addEventListener("fullscreenchange", handleFullscreenChange)
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+      document.removeEventListener("fullscreenchange", handleFullscreenChange)
+    }
+  }, [])
+
+  // Activity timer to fade out controls
+  const bumpControls = useCallback(() => {
+    setShowControls(true)
+    if (hideControlsTimer.current) {
+      clearTimeout(hideControlsTimer.current)
+    }
+    hideControlsTimer.current = setTimeout(() => {
+      setShowControls(false)
+    }, 3000)
+  }, [])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -99,8 +219,12 @@ function BroadcastCanvas() {
       canvas.height = initHeight
       const ctx = canvas.getContext("2d")
       if (ctx) {
-        ctx.fillStyle = "#000"
-        ctx.fillRect(0, 0, initWidth, initHeight)
+        if (isTransparent) {
+          ctx.clearRect(0, 0, initWidth, initHeight)
+        } else {
+          ctx.fillStyle = "#000000"
+          ctx.fillRect(0, 0, initWidth, initHeight)
+        }
       }
     }
 
@@ -133,66 +257,139 @@ function BroadcastCanvas() {
   }, [draw, preloadBackgroundImage])
 
   return (
-    <>
+    <div
+      ref={containerRef}
+      onMouseMove={bumpControls}
+      onTouchStart={bumpControls}
+      onDoubleClick={toggleFullscreen}
+      className="relative flex h-screen w-screen items-center justify-center overflow-hidden bg-black select-none"
+      style={{
+        backgroundColor: isTransparent ? "transparent" : "#000000",
+      }}
+    >
+      {/* 16:9 Centered Responsive Canvas */}
       <canvas
         ref={canvasRef}
+        className="max-h-full max-w-full aspect-video object-contain block shadow-2xl transition-all"
         style={{
-          width: "100vw",
-          height: "100vh",
-          display: "block",
-          objectFit: "contain",
+          width: "100%",
+          height: "100%",
         }}
       />
+
+      {/* Standby screen when waiting for connection or initial verse */}
+      {!isTransparent && !hasVerse && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none transition-opacity duration-700 bg-gradient-to-b from-black/80 via-black to-black">
+          <div className="flex flex-col items-center gap-4 text-center px-6">
+            <div className="relative flex size-16 items-center justify-center rounded-2xl bg-white/5 border border-white/10 shadow-[0_0_40px_rgba(255,255,255,0.05)] backdrop-blur-md">
+              <RadioIcon
+                className={`size-8 transition-colors ${
+                  connected
+                    ? "text-emerald-400 animate-pulse"
+                    : "text-amber-400/80 animate-bounce"
+                }`}
+              />
+              <span
+                className={`absolute -top-1 -right-1 size-3 rounded-full border-2 border-black ${
+                  connected ? "bg-emerald-500 animate-ping" : "bg-amber-500"
+                }`}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <h1 className="text-xl font-bold tracking-tight text-white/90 font-sans">
+                Sharon AG Bible Presentation
+              </h1>
+              <p className="text-xs font-medium text-white/40 tracking-wider uppercase">
+                {outputId === "alt" ? "Alternative / Stage Display" : "Main Live Display"}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70 backdrop-blur-sm">
+              <span
+                className={`size-2 rounded-full ${
+                  connected ? "bg-emerald-400" : "bg-amber-400 animate-pulse"
+                }`}
+              />
+              <span>
+                {connected
+                  ? "Live Wireless Stream Ready • Waiting for verse"
+                  : "Connecting to Sharon AG host..."}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Auto-Hiding Floating Controls Bar (Fades out when inactive) */}
       <div
-        style={{
-          position: "fixed",
-          bottom: 8,
-          right: 8,
-          width: 8,
-          height: 8,
-          borderRadius: "50%",
-          background: connected ? "#22c55e" : "#6b7280",
-          opacity: 0.7,
-          pointerEvents: "none",
-        }}
-      />
-      {!connected && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 24,
-            left: "50%",
-            transform: "translateX(-50%)",
-            color: "rgba(255,255,255,0.5)",
-            fontSize: 12,
-            fontFamily: "system-ui",
-          }}
+        className={`fixed bottom-4 right-4 z-50 flex items-center gap-1.5 rounded-full border border-white/15 bg-black/60 p-1 text-white shadow-2xl backdrop-blur-xl transition-all duration-300 ${
+          showControls ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none"
+        }`}
+      >
+        {/* Fullscreen Button */}
+        <button
+          onClick={toggleFullscreen}
+          title={isFullscreen ? "Exit Fullscreen (F)" : "Enter Fullscreen (F)"}
+          className="flex size-8 items-center justify-center rounded-full text-white/80 hover:bg-white/15 hover:text-white transition-colors"
         >
-          Waiting for connection...
-        </div>
-      )}
-      {sessionId === "default" && (
+          {isFullscreen ? (
+            <Minimize2Icon className="size-4" />
+          ) : (
+            <Maximize2Icon className="size-4" />
+          )}
+        </button>
+
+        {/* Wake Lock Screen Button */}
+        {"wakeLock" in navigator && (
+          <button
+            onClick={toggleWakeLock}
+            title={wakeLockActive ? "Screen Keep-Awake Active" : "Enable Keep-Awake"}
+            className={`flex size-8 items-center justify-center rounded-full transition-colors ${
+              wakeLockActive
+                ? "bg-amber-500/20 text-amber-300"
+                : "text-white/60 hover:bg-white/15 hover:text-white"
+            }`}
+          >
+            {wakeLockActive ? (
+              <SunIcon className="size-4" />
+            ) : (
+              <SunMoonIcon className="size-4" />
+            )}
+          </button>
+        )}
+
+        {/* Connection Status Indicator */}
         <div
-          style={{
-            position: "fixed",
-            top: 12,
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: "rgba(234,179,8,0.9)",
-            color: "#000",
-            fontSize: 11,
-            fontFamily: "system-ui",
-            fontWeight: 600,
-            padding: "4px 12px",
-            pointerEvents: "none",
-            whiteSpace: "nowrap",
-          }}
+          title={connected ? "Connected to Wi-Fi Host" : "Disconnected from Host"}
+          className="flex items-center gap-1.5 px-2.5 py-1 text-[0.6875rem] font-medium text-white/70"
         >
-          Shared channel — use your overlay URL from settings for a private
-          session
+          <span
+            className={`size-2 rounded-full ${
+              connected
+                ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"
+                : "bg-amber-400 animate-pulse"
+            }`}
+          />
+          <span className="hidden sm:inline">
+            {connected ? "Wi-Fi Live" : "Offline"}
+          </span>
         </div>
+      </div>
+
+      {/* Tiny Status Dot (visible when controls are hidden) */}
+      {!showControls && (
+        <div
+          title={connected ? "Connected" : "Disconnected"}
+          className="fixed bottom-2.5 right-2.5 z-40 size-2 rounded-full transition-opacity duration-500 pointer-events-none"
+          style={{
+            backgroundColor: connected ? "#10b981" : "#f59e0b",
+            opacity: connected ? 0.35 : 0.8,
+            boxShadow: connected ? "0 0 6px rgba(16,185,129,0.5)" : "none",
+          }}
+        />
       )}
-    </>
+    </div>
   )
 }
 

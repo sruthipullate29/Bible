@@ -4,7 +4,7 @@ import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { cn } from "@/lib/utils"
 import { useBroadcastStore, useBibleStore } from "@/stores"
 import { deriveLiveVerse } from "@/hooks/use-broadcast"
-import { TvIcon } from "lucide-react"
+import { TvIcon, WifiIcon } from "lucide-react"
 import type { Verse } from "@/types"
 
 
@@ -93,6 +93,17 @@ export function LiveOutputPanel() {
                   ? "HDMI Live"
                   : "HDMI Screen"}
             </span>
+          </button>
+          <button
+            onClick={() => {
+              const broadcastBtn = document.querySelector('[data-tour="broadcast"]') as HTMLButtonElement
+              broadcastBtn?.click()
+            }}
+            title="Wireless Wi-Fi & OBS Broadcast settings (Scan QR code, copy stream link)"
+            className="flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[0.5625rem] font-medium uppercase tracking-wider transition-all border bg-emerald-500/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/20"
+          >
+            <WifiIcon className="size-2.5 animate-pulse" />
+            <span>Wi-Fi Cast</span>
           </button>
           <button
             onClick={() => useBroadcastStore.getState().setLive(!isLive)}
