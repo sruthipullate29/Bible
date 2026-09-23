@@ -6,7 +6,7 @@ export interface QueueItem {
   secondaryVerse?: Verse
   reference: string
   confidence: number
-  source: "manual" | "ai-direct" | "ai-semantic" | "ai-cloud"
+  source: "manual" | "song" | "ai-direct" | "ai-semantic" | "ai-cloud"
   added_at: number
 }
 

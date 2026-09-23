@@ -50,6 +50,26 @@ export async function presentQueueItem(index: number) {
       if (res) bookNumber = res.num
     }
 
+    const isSong =
+      item.source === "song" ||
+      (!parsed && (!bookNumber || bookNumber === 0) && Boolean(item.verse?.text))
+
+    if (isSong) {
+      useBroadcastStore.getState().setLive(true)
+      useBroadcastStore.getState().setLiveVerse({
+        reference: item.reference,
+        segments: [
+          {
+            verseNumber: item.verse.verse || index + 1,
+            text: item.secondaryVerse?.text
+              ? `${item.verse.text}\n\n${item.secondaryVerse.text}`
+              : item.verse.text,
+          },
+        ],
+      })
+      return
+    }
+
     const resBook = resolveBook(bookNumber)
     const bookName = resBook?.name || item.verse.book_name || ""
     const teluguBookName = resBook?.teluguName || item.secondaryVerse?.book_name || ""

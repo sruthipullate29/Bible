@@ -1,4 +1,4 @@
-import { useRef } from "react"
+import { useState, useRef } from "react"
 import { PanelHeader } from "@/components/ui/panel-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,7 @@ import {
   UploadIcon,
   DatabaseIcon,
   FileTextIcon,
+  MusicIcon,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -25,6 +26,7 @@ import { toVerseRenderData } from "@/hooks/use-broadcast"
 import { bibleActions } from "@/hooks/use-bible"
 import { api } from "@/services"
 import { resolveBook, parseReference } from "@/lib/bible-books"
+import { SongLyricsDialog } from "@/components/song/song-lyrics-dialog"
 import type { QueueItem, Verse } from "@/types"
 
 function QueueItemRow({
@@ -38,6 +40,23 @@ function QueueItemRow({
 }) {
   const handlePresent = async () => {
     useQueueStore.getState().setActive(index)
+
+    // If this is a song lyric slide or non-Bible reference, display directly
+    if (item.source === "song" || !parseReference(item.reference)) {
+      useBroadcastStore.getState().setLive(true)
+      useBroadcastStore.getState().setLiveVerse({
+        reference: item.reference,
+        segments: [
+          {
+            verseNumber: item.verse.verse || 1,
+            text: item.secondaryVerse?.text
+              ? `${item.verse.text}\n\n${item.secondaryVerse.text}`
+              : item.verse.text,
+          },
+        ],
+      })
+      return
+    }
 
     const bibleState = useBibleStore.getState()
     const parsed = parseReference(item.reference)
@@ -144,19 +163,31 @@ function QueueItemRow({
     useQueueStore.getState().removeItem(item.id)
   }
 
-  const sourceBadge =
-    item.source === "manual" ? (
+  let sourceBadge = (
+    <Badge
+      variant="default"
+      className="shrink-0 bg-ai-direct/15 text-[0.5rem] text-ai-direct hover:bg-ai-direct/15"
+    >
+      AI
+    </Badge>
+  )
+  if (item.source === "song") {
+    sourceBadge = (
+      <Badge
+        variant="default"
+        className="shrink-0 bg-purple-500/15 text-[0.5rem] text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 gap-0.5"
+      >
+        <MusicIcon className="size-2.5" />
+        Song
+      </Badge>
+    )
+  } else if (item.source === "manual") {
+    sourceBadge = (
       <Badge variant="outline" className="shrink-0 text-[0.5rem]">
         Manual
       </Badge>
-    ) : (
-      <Badge
-        variant="default"
-        className="shrink-0 bg-ai-direct/15 text-[0.5rem] text-ai-direct hover:bg-ai-direct/15"
-      >
-        AI
-      </Badge>
     )
+  }
 
   return (
     <div
@@ -209,6 +240,7 @@ function QueueItemRow({
 export function QueuePanel() {
   const items = useQueueStore((s) => s.items)
   const activeIndex = useQueueStore((s) => s.activeIndex)
+  const [isSongDialogOpen, setIsSongDialogOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleExportJson = async () => {
@@ -278,11 +310,28 @@ export function QueuePanel() {
         onChange={handleImportFile}
       />
 
+      <SongLyricsDialog
+        open={isSongDialogOpen}
+        onOpenChange={setIsSongDialogOpen}
+      />
+
       <PanelHeader title="Queue">
         <div className="flex items-center gap-1.5">
           <Badge variant="outline" className="h-5 px-1.5 text-xs font-semibold">
             {items.length}
           </Badge>
+
+          {/* Add Song / Lyrics / PPT Button */}
+          <Button
+            variant="outline"
+            size="xs"
+            className="h-6 gap-1 px-2 text-[0.65rem] border-purple-500/30 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10 hover:text-purple-700 dark:hover:text-purple-300 font-medium"
+            onClick={() => setIsSongDialogOpen(true)}
+            title="Add song lyrics from clipboard, Word doc (.docx), or PowerPoint (.pptx)"
+          >
+            <MusicIcon className="size-2.5" />
+            Add Song
+          </Button>
 
           {/* Local Database Saved Indicator */}
           <div
@@ -360,17 +409,28 @@ export function QueuePanel() {
                 Queue is empty
               </p>
               <p className="mt-1 text-[0.7rem] text-muted-foreground/70">
-                Verses added here are saved to your local system database
+                Verses and song slides added here are saved to your local database
               </p>
-              <Button
-                variant="outline"
-                size="xs"
-                className="mt-3 gap-1.5 text-[0.7rem]"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <UploadIcon className="size-3" />
-                Load Saved File
-              </Button>
+              <div className="mt-3 flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="xs"
+                  className="gap-1.5 text-[0.7rem]"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <UploadIcon className="size-3" />
+                  Load Saved File
+                </Button>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  className="gap-1.5 text-[0.7rem] border-purple-500/30 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
+                  onClick={() => setIsSongDialogOpen(true)}
+                >
+                  <MusicIcon className="size-3" />
+                  Add Song
+                </Button>
+              </div>
             </div>
           )}
           {items.map((item, idx) => (
